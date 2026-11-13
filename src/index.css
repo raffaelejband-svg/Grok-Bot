@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, ui-serif, serif;
+  --color-linen: #f3eee6;
+  --color-paper: #fffdf8;
+  --color-ink: #2c261f;
+  --color-muted: #5c534b;
+  --color-line: #e4d9cc;
+  --color-clay: #8d4b32;
+  --color-clay-soft: #f6e6da;
+}
+
+html {
+  height: 100%;
+  overflow: hidden;
+  color-scheme: light;
+  background-color: var(--color-linen);
+}
+
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background-color: var(--color-linen);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+a,
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: #f6e6da;
+  color: #2c261f;
+}
