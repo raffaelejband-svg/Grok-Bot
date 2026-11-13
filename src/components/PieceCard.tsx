@@ -1,14 +1,15 @@
 import { CATEGORY_LABELS, COLOUR_LABELS, OCCASION_LABELS, SEASON_LABELS, type Garment } from '../domain/types.ts'
 import { GARMENT_COLOUR_SWATCH } from './colourSwatch.ts'
-import { GarmentPhoto } from './GarmentPhoto.tsx'
+import { PhotoView } from './PhotoView.tsx'
 
 export function PieceCard({ garment, onSwap }: { garment: Garment; onSwap?: () => void }) {
   const category = CATEGORY_LABELS[garment.category]
 
   return (
     <article className="flex gap-3 rounded-[1.5rem] border border-line bg-paper p-3">
-      <GarmentPhoto
-        garment={garment}
+      <PhotoView
+        photo={garment.photo}
+        alt={`${category} ${COLOUR_LABELS[garment.colour]}`}
         className="size-24 shrink-0 rounded-2xl border border-line object-cover"
       />
       <div className="flex min-w-0 flex-1 flex-col">

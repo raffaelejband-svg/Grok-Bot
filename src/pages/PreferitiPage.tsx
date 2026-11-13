@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { primaryButtonClass, secondaryButtonClass } from '../components/buttonStyles.ts'
 import { EmptyState } from '../components/EmptyState.tsx'
-import { GarmentPhoto } from '../components/GarmentPhoto.tsx'
 import { MissingPieceCard, PieceCard } from '../components/PieceCard.tsx'
+import { PhotoView } from '../components/PhotoView.tsx'
 import { OCCASION_LABELS, SEASON_LABELS, type Garment, type Outfit } from '../domain/types.ts'
 import { deleteOutfit, listGarments, listOutfits } from '../storage/db.ts'
 
@@ -86,10 +86,10 @@ export function PreferitiPage() {
                 {outfit.garmentIds.slice(0, 4).map((id, index) => {
                   const garment = archive.garments.get(id)
                   return garment ? (
-                    <GarmentPhoto
+                    <PhotoView
                       key={`${id}-${index}`}
-                      garment={garment}
-                      decorative
+                      photo={garment.photo}
+                      alt=""
                       className="size-14 rounded-xl border border-line object-cover"
                     />
                   ) : (

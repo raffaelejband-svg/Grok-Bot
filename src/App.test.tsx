@@ -8,6 +8,9 @@ vi.mock('./storage/db.ts', () => ({
   addGarment: vi.fn(),
   updateGarment: vi.fn(),
   deleteGarment: vi.fn(),
+  listOutfits: vi.fn(async () => []),
+  saveOutfit: vi.fn(),
+  deleteOutfit: vi.fn(),
 }))
 
 describe('guscio dell’app', () => {
