@@ -4,7 +4,7 @@ Armadio Outfit è un’app per il telefono: ti aiuta a creare outfit con i vesti
 
 In questa versione **capi e outfit restano solo nel browser** di questo dispositivo. Non c’è un account e non c’è un server. Se cancelli i dati del sito, o cambi telefono o browser, i vestiti salvati non ci sono più.
 
-Per ora vedi tre schermate — Guardaroba, Outfit e Preferiti — ancora vuote. Il salvataggio dei capi (foto comprese) è già pronto nel browser. Il modulo per aggiungere un capo e i suggerimenti di outfit arrivano dopo.
+Nel Guardaroba aggiungi i capi con una foto, li filtri e li modifichi: restano nel browser. Outfit e Preferiti sono ancora vuoti; i suggerimenti di outfit arrivano dopo.
 
 ## Cosa ti serve
 
