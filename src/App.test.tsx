@@ -8,6 +8,9 @@ vi.mock('./storage/db.ts', () => ({
   addGarment: vi.fn(),
   updateGarment: vi.fn(),
   deleteGarment: vi.fn(),
+  listOutfits: vi.fn(async () => []),
+  saveOutfit: vi.fn(),
+  deleteOutfit: vi.fn(),
 }))
 
 describe('guscio dell’app', () => {
@@ -25,11 +28,11 @@ describe('guscio dell’app', () => {
 
     fireEvent.click(screen.getByRole('link', { name: 'Outfit' }))
     expect(screen.getByRole('heading', { level: 1, name: 'Outfit' })).toBeInTheDocument()
-    expect(screen.getByText('Nessun outfit')).toBeInTheDocument()
+    expect(await screen.findByText('Nessun outfit')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('link', { name: 'Preferiti' }))
     expect(screen.getByRole('heading', { level: 1, name: 'Preferiti' })).toBeInTheDocument()
-    expect(screen.getByText('Nessun preferito')).toBeInTheDocument()
+    expect(await screen.findByText('Nessun preferito')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('link', { name: 'Guardaroba' }))
     expect(screen.getByRole('heading', { level: 1, name: 'Guardaroba' })).toBeInTheDocument()
