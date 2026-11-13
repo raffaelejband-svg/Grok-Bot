@@ -9,9 +9,11 @@ if (!root) {
   throw new Error('Manca l’elemento root della pagina.')
 }
 
+const basename = import.meta.env.BASE_URL.replace(/\/$/, '')
+
 createRoot(root).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={basename === '' ? undefined : basename}>
       <App />
     </BrowserRouter>
   </StrictMode>,

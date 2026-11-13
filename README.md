@@ -2,6 +2,8 @@
 
 Armadio Outfit è un’app per il telefono. Tiene il guardaroba dei vestiti che hai già e ti propone un outfit in base all’occasione, alla stagione e ai colori che stanno bene insieme. Gli outfit che ti piacciono li salvi nei Preferiti, sempre su quel telefono.
 
+L’indirizzo pubblico, in https, è [https://raffaelejband-svg.github.io/Grok-Bot/](https://raffaelejband-svg.github.io/Grok-Bot/). Si aggiorna quando il ramo `main` viene pubblicato da GitHub Actions.
+
 ## Cosa fa
 
 - Nel **Guardaroba** aggiungi i tuoi capi, ognuno con una foto.
@@ -63,22 +65,21 @@ npm run build
 
 Il sito pronto finisce nella cartella `dist/`.
 
+## Metterla online
+
+Ogni push su `main` lancia GitHub Actions: esegue i test, costruisce il sito e lo pubblica su GitHub Pages.
+
+[https://raffaelejband-svg.github.io/Grok-Bot/](https://raffaelejband-svg.github.io/Grok-Bot/)
+
+La pubblicazione usa la cartella `dist/`. In Impostazioni → Pages la sorgente deve essere **GitHub Actions**.
+
 Per vederla in locale, dopo la build:
 
 ```bash
 npm run preview
 ```
 
-## Metterla online
-
-`dist/` è un sito statico: file già pronti, senza un server tuo. Puoi copiarli su un hosting statico qualsiasi, per esempio Netlify, Cloudflare Pages, Vercel o GitHub Pages.
-
-Se l’hosting costruisce il sito dal codice, imposta:
-
-- comando di build: `npm run build`
-- cartella da pubblicare: `dist`
-
-Se carichi i file a mano, carica **il contenuto** di `dist/`.
+L’anteprima è su `http://localhost:4173/Grok-Bot/`, perché il sito pubblico sta in una sottocartella.
 
 L’app ha più pagine (Guardaroba, Outfit, Preferiti). Perché funzionino anche quando aggiorni la pagina, l’hosting deve restituire `index.html` per quegli indirizzi. Nel progetto c’è già:
 
@@ -87,7 +88,7 @@ L’app ha più pagine (Guardaroba, Outfit, Preferiti). Perché funzionino anche
 
 ### Sul telefono, come un’app
 
-Con il sito aperto in https, dal browser del telefono puoi installare **Armadio Outfit** sulla schermata Home. È una PWA: si apre a tutto schermo, come un’app.
+Apri l’indirizzo https dal browser del telefono e installa **Armadio Outfit** sulla schermata Home. È una PWA: manifest, service worker e https. Si apre a tutto schermo, come un’app.
 
 - Su iPhone: Condividi, poi «Aggiungi a Home».
 - Su Android: menu del browser, poi «Installa app» o «Aggiungi a schermata Home».
@@ -96,9 +97,11 @@ I vestiti restano nel browser di quel telefono, non in un account.
 
 ## Come si usa
 
-1. In **Guardaroba**, tocca **Aggiungi un capo**. Scegli una foto (scattala o prendila dalla galleria), poi categoria, colore, stagione e stile. Tocca **Salva il capo**.
+1. In **Guardaroba**, tocca **Aggiungi un capo**. Scatta una foto (fotocamera dietro) o sceglila dalla galleria. Categoria e colore si compilano da soli: controlla, cambiali se serve, e tocca **Conferma**. La stagione parte da «tutte» e lo stile da «casual». Puoi aggiungere un’altra foto subito, senza tornare all’elenco.
 2. Per cercare tra i vestiti, tocca **Filtra i capi** e scegli categoria, colore, stagione o stile. **Azzera i filtri** li mostra di nuovo tutti.
 3. Vai su **Outfit**, scegli occasione e stagione, poi tocca **Genera**.
 4. **Rigenera** propone un’altra combinazione.
 5. Su un capo del look, **Cambia** lo sostituisce con un altro dello stesso tipo, se nel guardaroba ce n’è uno che sta bene con il resto.
 6. Tocca **Salva**. L’outfit compare in **Preferiti**.
+
+Categoria e colore sono una proposta fatta sul telefono. Il colore si ricava dai pixel al centro della foto, scartando uno sfondo uniforme: un rosso o un azzurro pieni si leggono bene, un bianco può uscire argento e un marrone scuro può uscire nero. La categoria usa MobileNet v1 (circa 5 MB), un modello generico non addestrato sui vestiti. Jeans, magliette e scarpe che riempiono la foto spesso ci azzeccano; una borsa con un disegno, gli occhiali in un paesaggio o una persona intera spesso no. La foto non viene inviata a un server. La prima volta la categoria può impiegare qualche secondo, perché il telefono scarica il modello.

@@ -2,7 +2,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Garment } from '../domain/types.ts'
 import { addGarment, deleteGarment, listGarments, updateGarment } from '../storage/db.ts'
+import { recognizeGarment } from '../vision/recognizeGarment.ts'
 import { GuardarobaPage } from './GuardarobaPage.tsx'
+
+vi.mock('../vision/recognizeGarment.ts', () => ({
+  recognizeGarment: vi.fn(async () => ({ category: null, colour: null })),
+}))
 
 vi.mock('../storage/db.ts', () => ({
   listGarments: vi.fn(),
@@ -45,6 +50,8 @@ beforeEach(() => {
   vi.mocked(addGarment).mockResolvedValue(undefined)
   vi.mocked(updateGarment).mockResolvedValue(undefined)
   vi.mocked(deleteGarment).mockResolvedValue(undefined)
+  vi.mocked(recognizeGarment).mockReset()
+  vi.mocked(recognizeGarment).mockResolvedValue({ category: null, colour: null })
 })
 
 describe('guardaroba', () => {
@@ -125,18 +132,20 @@ describe('guardaroba', () => {
   it('non salva un capo se mancano foto o campi', async () => {
     render(<GuardarobaPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Aggiungi un capo' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Salva il capo' }))
+    expect(screen.getByLabelText('Stagione')).toHaveValue('tutte')
+    expect(screen.getByLabelText('Stile')).toHaveValue('casual')
+    fireEvent.click(screen.getByRole('button', { name: 'Conferma' }))
 
     expect(screen.getByText('Aggiungi una foto del capo.')).toBeInTheDocument()
     expect(screen.getByText('Scegli una categoria.')).toBeInTheDocument()
     expect(screen.getByText('Scegli un colore.')).toBeInTheDocument()
-    expect(screen.getByText('Scegli una stagione.')).toBeInTheDocument()
-    expect(screen.getByText('Scegli uno stile.')).toBeInTheDocument()
+    expect(screen.queryByText('Scegli una stagione.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Scegli uno stile.')).not.toBeInTheDocument()
     expect(addGarment).not.toHaveBeenCalled()
 
     chooseFile('Scegli dalla galleria', new File(['note'], 'note.txt', { type: 'text/plain' }))
     fireEvent.change(screen.getByLabelText('Categoria'), { target: { value: 'top' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Salva il capo' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Conferma' }))
     expect(screen.getByText('Scegli un file immagine.')).toBeInTheDocument()
     expect(addGarment).not.toHaveBeenCalled()
   })
@@ -149,14 +158,21 @@ describe('guardaroba', () => {
     expect(camera).toHaveAttribute('accept', 'image/*')
     expect(camera).toHaveAttribute('capture', 'environment')
     expect(screen.getByLabelText('Scegli dalla galleria')).toHaveAttribute('accept', 'image/*')
+    expect(screen.getByLabelText('Stagione')).toHaveValue('tutte')
+    expect(screen.getByLabelText('Stile')).toHaveValue('casual')
 
+    vi.mocked(recognizeGarment).mockResolvedValue({ category: 'scarpe', colour: 'rosso' })
     const file = new File(['foto-nuova'], 'camicia.jpg', { type: 'image/jpeg' })
     chooseFile('Scegli dalla galleria', file)
+    expect(await screen.findByText('Categoria e colore sono una proposta. Puoi cambiarli.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Categoria')).toHaveValue('scarpe')
+    expect(screen.getByLabelText('Colore')).toHaveValue('rosso')
+
     fireEvent.change(screen.getByLabelText('Categoria'), { target: { value: 'pantaloni' } })
     fireEvent.change(screen.getByLabelText('Colore'), { target: { value: 'nero' } })
     fireEvent.change(screen.getByLabelText('Stagione'), { target: { value: 'autunno' } })
     fireEvent.change(screen.getByLabelText('Stile'), { target: { value: 'lavoro' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Salva il capo' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Conferma' }))
 
     await waitFor(() => expect(addGarment).toHaveBeenCalledOnce())
     const saved = vi.mocked(addGarment).mock.calls[0][0]
@@ -167,7 +183,64 @@ describe('guardaroba', () => {
     expect(saved.id).not.toBe('')
     expect(Number.isNaN(Date.parse(saved.createdAt))).toBe(false)
     expect(await saved.photo.text()).toBe('foto-nuova')
+    expect(screen.getByRole('heading', { name: 'Nuovo capo' })).toBeInTheDocument()
+    expect(screen.getByText('Capo salvato. Puoi aggiungerne un altro.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Torna al guardaroba' }))
     expect(await screen.findByRole('button', { name: 'Pantaloni, Nero, Autunno' })).toBeInTheDocument()
+  })
+
+  it('aggiunge più foto di seguito senza uscire dal modulo', async () => {
+    render(<GuardarobaPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Aggiungi un capo' }))
+
+    vi.mocked(recognizeGarment).mockResolvedValueOnce({ category: 'top', colour: 'blu' })
+    chooseFile('Scatta una foto', new File(['prima'], 'prima.jpg', { type: 'image/jpeg' }))
+    await waitFor(() => expect(screen.getByLabelText('Categoria')).toHaveValue('top'))
+    fireEvent.click(screen.getByRole('button', { name: 'Conferma' }))
+    expect(await screen.findByText('Capo salvato. Puoi aggiungerne un altro.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Stagione')).toHaveValue('tutte')
+    expect(screen.getByLabelText('Stile')).toHaveValue('casual')
+    expect(screen.getByLabelText('Categoria')).toHaveValue('')
+
+    vi.mocked(recognizeGarment).mockResolvedValueOnce({ category: 'giacca', colour: 'beige' })
+    chooseFile('Scegli dalla galleria', new File(['seconda'], 'seconda.jpg', { type: 'image/jpeg' }))
+    await waitFor(() => expect(screen.getByLabelText('Categoria')).toHaveValue('giacca'))
+    fireEvent.click(screen.getByRole('button', { name: 'Conferma' }))
+    await waitFor(() => expect(addGarment).toHaveBeenCalledTimes(2))
+
+    const [first, second] = vi.mocked(addGarment).mock.calls.map((call) => call[0])
+    expect(first.category).toBe('top')
+    expect(first.colour).toBe('blu')
+    expect(first.season).toBe('tutte')
+    expect(first.occasion).toBe('casual')
+    expect(await first.photo.text()).toBe('prima')
+    expect(second.category).toBe('giacca')
+    expect(second.colour).toBe('beige')
+    expect(second.season).toBe('tutte')
+    expect(second.occasion).toBe('casual')
+    expect(screen.getByRole('heading', { name: 'Nuovo capo' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Torna al guardaroba' }))
+    expect(await screen.findByRole('button', { name: 'Top, Blu, Tutte le stagioni' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Giacca, Beige, Tutte le stagioni' })).toBeInTheDocument()
+  })
+
+  it('non sovrascrive categoria e colore se li hai già cambiati', async () => {
+    let finish: (guess: { category: 'scarpe'; colour: 'nero' }) => void = () => {}
+    vi.mocked(recognizeGarment).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    render(<GuardarobaPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Aggiungi un capo' }))
+    chooseFile('Scegli dalla galleria', new File(['foto'], 'foto.jpg', { type: 'image/jpeg' }))
+    expect(screen.getByRole('button', { name: 'Guardo la foto…' })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Categoria'), { target: { value: 'giacca' } })
+    finish({ category: 'scarpe', colour: 'nero' })
+    expect(await screen.findByText('Categoria e colore sono una proposta. Puoi cambiarli.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Categoria')).toHaveValue('giacca')
+    expect(screen.getByLabelText('Colore')).toHaveValue('nero')
   })
 
   it('annulla senza chiamare l’archivio', async () => {
@@ -183,9 +256,12 @@ describe('guardaroba', () => {
     vi.mocked(listGarments).mockResolvedValue([saved])
     render(<GuardarobaPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Top, Blu, Estate' }))
+    expect(screen.getByLabelText('Stagione')).toHaveValue('estate')
+    expect(screen.getByLabelText('Stile')).toHaveValue('casual')
 
     const file = new File(['foto-verde'], 'verde.png', { type: 'image/png' })
     chooseFile('Scatta una foto', file)
+    expect(await screen.findByRole('button', { name: 'Salva il capo' })).toBeEnabled()
     fireEvent.change(screen.getByLabelText('Colore'), { target: { value: 'verde' } })
     fireEvent.change(screen.getByLabelText('Stile'), { target: { value: 'elegante' } })
     fireEvent.click(screen.getByRole('button', { name: 'Salva il capo' }))
@@ -223,9 +299,8 @@ describe('guardaroba', () => {
     chooseFile('Scegli dalla galleria', new File(['foto'], 'camicia.jpg', { type: 'image/jpeg' }))
     fireEvent.change(screen.getByLabelText('Categoria'), { target: { value: 'top' } })
     fireEvent.change(screen.getByLabelText('Colore'), { target: { value: 'blu' } })
-    fireEvent.change(screen.getByLabelText('Stagione'), { target: { value: 'estate' } })
-    fireEvent.change(screen.getByLabelText('Stile'), { target: { value: 'casual' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Salva il capo' }))
+    expect(await screen.findByRole('button', { name: 'Conferma' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Conferma' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Non sono riuscito a salvare il capo. Riprova.')
     expect(screen.getByRole('heading', { name: 'Nuovo capo' })).toBeInTheDocument()
