@@ -66,7 +66,6 @@ export function GuardarobaPage() {
       return { status: 'ready', garments: [garment, ...garments.filter((item) => item.id !== garment.id)] }
     })
     setFilter(EMPTY_GARMENT_FILTER)
-    setMode({ type: 'browse' })
   }
 
   async function saveExisting(garment: Garment) {
@@ -99,6 +98,7 @@ export function GuardarobaPage() {
         key={editing?.id ?? 'new'}
         headingRef={headingRef}
         garment={editing}
+        repeatAfterSave={!editing}
         onCancel={() => setMode({ type: 'browse' })}
         onSave={editing ? saveExisting : saveNew}
         onDelete={editing ? () => removeGarment(editing.id) : undefined}
