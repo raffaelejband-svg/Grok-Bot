@@ -30,7 +30,7 @@ export default defineConfig(({ command }) => {
           id: base,
           name: 'Armadio Outfit',
           short_name: 'Armadio Outfit',
-          description: 'Crea outfit con i vestiti che hai già. Capi e look restano su questo dispositivo.',
+          description: 'Crea outfit con i vestiti che hai già. Con un account, lo stesso guardaroba è sui tuoi dispositivi.',
           lang: 'it',
           dir: 'ltr',
           start_url: base,

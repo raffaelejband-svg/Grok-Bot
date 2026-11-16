@@ -40,5 +40,9 @@ describe('guscio dell’app', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Impostazioni' }))
     expect(screen.getByRole('heading', { level: 1, name: 'Impostazioni' })).toBeInTheDocument()
     expect(screen.getByText('Nessuna chiave. Le foto restano sul telefono.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('link', { name: 'Account' }))
+    expect(screen.getByRole('heading', { level: 1, name: 'Account' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Sincronizzazione da attivare' })).toBeInTheDocument()
   })
 })

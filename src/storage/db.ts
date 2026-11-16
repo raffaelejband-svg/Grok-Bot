@@ -1,6 +1,7 @@
 /**
  * Archivio locale (IndexedDB) per capi e outfit.
- * Le foto sono Blob dentro il record del capo: restano nel browser e non vanno su un server.
+ * Le foto sono Blob dentro il record del capo.
+ * Con un account, una copia può andare sul progetto Firebase: la chiave Gemini no.
  */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import {
@@ -21,6 +22,7 @@ import {
   type Season,
   type SubType,
 } from '../domain/types.ts'
+import { notifyLocalChange } from './syncBridge.ts'
 
 export const DATABASE_NAME = 'armadio-outfit'
 const DATABASE_VERSION = 1
@@ -172,7 +174,7 @@ export async function getGarment(id: string): Promise<Garment | undefined> {
 }
 
 export async function addGarment(garment: Garment): Promise<void> {
-  const stored = prepareGarment(garment)
+  const stored = prepareGarment({ ...garment, updatedAt: new Date().toISOString() })
   assertGarment(stored)
   const database = await getDatabase()
   const existing = await database.get('garments', garment.id)
@@ -180,10 +182,11 @@ export async function addGarment(garment: Garment): Promise<void> {
     throw new Error('Esiste già un capo con questo id.')
   }
   await database.add('garments', stored)
+  await notifyLocalChange({ kind: 'garment-put', garment: stored })
 }
 
 export async function updateGarment(garment: Garment): Promise<void> {
-  const stored = prepareGarment(garment)
+  const stored = prepareGarment({ ...garment, updatedAt: new Date().toISOString() })
   assertGarment(stored)
   const database = await getDatabase()
   const existing = await database.get('garments', garment.id)
@@ -191,12 +194,27 @@ export async function updateGarment(garment: Garment): Promise<void> {
     throw new Error('Capo non trovato.')
   }
   await database.put('garments', stored)
+  await notifyLocalChange({ kind: 'garment-put', garment: stored })
+}
+
+/** Arriva dall’account: non rimanda la copia e non cambia l’orario. */
+export async function putGarmentFromCloud(garment: Garment): Promise<void> {
+  const stored = prepareGarment({ ...garment, updatedAt: garment.updatedAt ?? garment.createdAt })
+  assertGarment(stored)
+  const database = await getDatabase()
+  await database.put('garments', stored)
+}
+
+export async function removeGarmentFromCloud(id: string): Promise<void> {
+  const database = await getDatabase()
+  await database.delete('garments', id)
 }
 
 /** Elimina il capo. Gli outfit che lo citano restano invariati. */
 export async function deleteGarment(id: string): Promise<void> {
   const database = await getDatabase()
   await database.delete('garments', id)
+  await notifyLocalChange({ kind: 'garment-delete', id })
 }
 
 export async function listOutfits(): Promise<Outfit[]> {
@@ -207,12 +225,27 @@ export async function listOutfits(): Promise<Outfit[]> {
 
 /** Crea l’outfit oppure sostituisce quello con lo stesso id. */
 export async function saveOutfit(outfit: Outfit): Promise<void> {
-  assertOutfit(outfit)
+  const stored = { ...outfit, updatedAt: new Date().toISOString() }
+  assertOutfit(stored)
   const database = await getDatabase()
-  await database.put('outfits', outfit)
+  await database.put('outfits', stored)
+  await notifyLocalChange({ kind: 'outfit-put', outfit: stored })
+}
+
+export async function putOutfitFromCloud(outfit: Outfit): Promise<void> {
+  const stored = { ...outfit, updatedAt: outfit.updatedAt ?? outfit.createdAt }
+  assertOutfit(stored)
+  const database = await getDatabase()
+  await database.put('outfits', stored)
+}
+
+export async function removeOutfitFromCloud(id: string): Promise<void> {
+  const database = await getDatabase()
+  await database.delete('outfits', id)
 }
 
 export async function deleteOutfit(id: string): Promise<void> {
   const database = await getDatabase()
   await database.delete('outfits', id)
+  await notifyLocalChange({ kind: 'outfit-delete', id })
 }

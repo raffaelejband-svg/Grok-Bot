@@ -23,8 +23,10 @@ import {
   type SubType,
 } from '../domain/types.ts'
 import type { Garment } from '../domain/types.ts'
+import { useCloud } from '../cloud/context.ts'
 import type { GarmentGuess } from '../vision/guess.ts'
 import { recognizeGarment } from '../vision/recognizeGarment.ts'
+import { BulkGarmentReview } from './BulkGarmentReview.tsx'
 import { PhotoView } from './PhotoView.tsx'
 
 type GarmentFormProps = {
@@ -166,6 +168,8 @@ export function GarmentForm({
   const [guess, setGuess] = useState<GuessState>('idle')
   const [guessNote, setGuessNote] = useState<string | null>(null)
   const [savedCount, setSavedCount] = useState(0)
+  const [bulk, setBulk] = useState<{ files: File[]; skipped: number } | null>(null)
+  const { linked } = useCloud()
 
   const preview = photo ?? garment?.photo ?? null
   const previewAlt = photo ? 'Anteprima della foto' : 'Foto attuale'
@@ -367,6 +371,31 @@ export function GarmentForm({
   const subtypeOptions = subtypesForCategory(knownCategory)
   const subtypeValue = (subtypeOptions as readonly string[]).includes(subType) ? subType : 'altro'
 
+  function chooseFromGallery(list: FileList | null) {
+    const selected = Array.from(list ?? [])
+    if (garment || selected.length <= 1) {
+      takePhoto(selected[0] ?? null)
+      return
+    }
+    const images = selected.filter(isLikelyImage)
+    if (images.length <= 1) {
+      takePhoto(images[0] ?? selected[0] ?? null)
+      return
+    }
+    setBulk({ files: images, skipped: selected.length - images.length })
+  }
+
+  if (bulk) {
+    return (
+      <BulkGarmentReview
+        files={bulk.files}
+        skipped={bulk.skipped}
+        onCancel={onCancel}
+        onSave={onSave}
+      />
+    )
+  }
+
   return (
     <section className="flex flex-1 flex-col">
       <button
@@ -425,14 +454,19 @@ export function GarmentForm({
               <input
                 type="file"
                 accept="image/*"
+                multiple
                 className="sr-only"
                 onChange={(event) => {
-                  takePhoto(event.target.files?.[0] ?? null)
+                  const selected = event.target.files
                   event.target.value = ''
+                  chooseFromGallery(selected)
                 }}
               />
             </label>
           </div>
+          {garment ? null : (
+            <p className="mt-3 text-base leading-snug text-muted">Dal computer puoi selezionare tante foto insieme.</p>
+          )}
           {errors.photo ? (
             <p id={photoErrorId} className="mt-2 text-base text-clay">
               {errors.photo}
@@ -558,7 +592,9 @@ export function GarmentForm({
           {confirmDelete ? (
             <div role="group" aria-label="Conferma eliminazione">
               <p className="text-base leading-relaxed">
-                Togliere questo capo dal guardaroba? Si cancella solo da questo telefono.
+                {linked
+                  ? 'Togliere questo capo dal guardaroba? Si toglie anche dagli altri dispositivi dell’account.'
+                  : 'Togliere questo capo dal guardaroba? Si cancella solo da questo telefono.'}
               </p>
               <button
                 type="button"

@@ -5,6 +5,7 @@ import { EmptyState } from '../components/EmptyState.tsx'
 import { MissingPieceCard, PieceCard } from '../components/PieceCard.tsx'
 import { PhotoView } from '../components/PhotoView.tsx'
 import { OCCASION_LABELS, SEASON_LABELS, type Garment, type Outfit } from '../domain/types.ts'
+import { useCloud } from '../cloud/context.ts'
 import { deleteOutfit, listGarments, listOutfits } from '../storage/db.ts'
 
 type Archive = {
@@ -15,8 +16,10 @@ type Archive = {
 export function PreferitiPage() {
   const [archive, setArchive] = useState<Archive | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const { revision, starting } = useCloud()
 
   useEffect(() => {
+    if (starting) return
     let active = true
     Promise.all([listOutfits(), listGarments()])
       .then(([outfits, garments]) => {
@@ -29,7 +32,7 @@ export function PreferitiPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [revision, starting])
 
   const selected = archive?.outfits.find((outfit) => outfit.id === selectedId)
 
