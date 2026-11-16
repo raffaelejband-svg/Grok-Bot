@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Garment } from '../domain/types.ts'
 import { addGarment, deleteGarment, listGarments, updateGarment } from '../storage/db.ts'
+import type { GarmentGuess } from '../vision/guess.ts'
 import { recognizeGarment } from '../vision/recognizeGarment.ts'
 import { GuardarobaPage } from './GuardarobaPage.tsx'
 
@@ -15,6 +16,21 @@ vi.mock('../storage/db.ts', () => ({
   updateGarment: vi.fn(),
   deleteGarment: vi.fn(),
 }))
+
+function guess(overrides: Partial<GarmentGuess> = {}): GarmentGuess {
+  return {
+    category: null,
+    subType: null,
+    colour: null,
+    colourSecondary: null,
+    pattern: null,
+    material: null,
+    occasion: null,
+    season: null,
+    source: 'device',
+    ...overrides,
+  }
+}
 
 function garment(overrides: Partial<Garment> = {}): Garment {
   return {
@@ -51,7 +67,7 @@ beforeEach(() => {
   vi.mocked(updateGarment).mockResolvedValue(undefined)
   vi.mocked(deleteGarment).mockResolvedValue(undefined)
   vi.mocked(recognizeGarment).mockReset()
-  vi.mocked(recognizeGarment).mockResolvedValue({ category: null, colour: null })
+  vi.mocked(recognizeGarment).mockResolvedValue(guess())
 })
 
 describe('guardaroba', () => {
@@ -160,11 +176,19 @@ describe('guardaroba', () => {
     expect(screen.getByLabelText('Scegli dalla galleria')).toHaveAttribute('accept', 'image/*')
     expect(screen.getByLabelText('Stagione')).toHaveValue('tutte')
     expect(screen.getByLabelText('Stile')).toHaveValue('casual')
+    expect(screen.getByLabelText('Tipo')).toHaveValue('altro')
+    expect(screen.getByLabelText('Disegno')).toHaveValue('tinta unita')
+    expect(screen.getByLabelText('Materiale')).toHaveValue('sconosciuto')
+    expect(screen.getByLabelText('Secondo colore')).toHaveValue('')
+    expect(screen.getByText('Un capo per foto')).toBeInTheDocument()
+    expect(screen.getByText('Sfondo chiaro e semplice')).toBeInTheDocument()
+    expect(screen.getByText('Il capo tutto dentro la cornice')).toBeInTheDocument()
+    expect(screen.getByText('Luce buona e uniforme')).toBeInTheDocument()
 
-    vi.mocked(recognizeGarment).mockResolvedValue({ category: 'scarpe', colour: 'rosso' })
+    vi.mocked(recognizeGarment).mockResolvedValue(guess({ category: 'scarpe', colour: 'rosso' }))
     const file = new File(['foto-nuova'], 'camicia.jpg', { type: 'image/jpeg' })
     chooseFile('Scegli dalla galleria', file)
-    expect(await screen.findByText('Categoria e colore sono una proposta. Puoi cambiarli.')).toBeInTheDocument()
+    expect(await screen.findByText('Questi dati sono una proposta. Controlla e cambiali se serve.')).toBeInTheDocument()
     expect(screen.getByLabelText('Categoria')).toHaveValue('scarpe')
     expect(screen.getByLabelText('Colore')).toHaveValue('rosso')
 
@@ -193,7 +217,7 @@ describe('guardaroba', () => {
     render(<GuardarobaPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Aggiungi un capo' }))
 
-    vi.mocked(recognizeGarment).mockResolvedValueOnce({ category: 'top', colour: 'blu' })
+    vi.mocked(recognizeGarment).mockResolvedValueOnce(guess({ category: 'top', colour: 'blu' }))
     chooseFile('Scatta una foto', new File(['prima'], 'prima.jpg', { type: 'image/jpeg' }))
     await waitFor(() => expect(screen.getByLabelText('Categoria')).toHaveValue('top'))
     fireEvent.click(screen.getByRole('button', { name: 'Conferma' }))
@@ -202,7 +226,7 @@ describe('guardaroba', () => {
     expect(screen.getByLabelText('Stile')).toHaveValue('casual')
     expect(screen.getByLabelText('Categoria')).toHaveValue('')
 
-    vi.mocked(recognizeGarment).mockResolvedValueOnce({ category: 'giacca', colour: 'beige' })
+    vi.mocked(recognizeGarment).mockResolvedValueOnce(guess({ category: 'giacca', colour: 'beige' }))
     chooseFile('Scegli dalla galleria', new File(['seconda'], 'seconda.jpg', { type: 'image/jpeg' }))
     await waitFor(() => expect(screen.getByLabelText('Categoria')).toHaveValue('giacca'))
     fireEvent.click(screen.getByRole('button', { name: 'Conferma' }))
@@ -226,7 +250,7 @@ describe('guardaroba', () => {
   })
 
   it('non sovrascrive categoria e colore se li hai già cambiati', async () => {
-    let finish: (guess: { category: 'scarpe'; colour: 'nero' }) => void = () => {}
+    let finish: (value: GarmentGuess) => void = () => {}
     vi.mocked(recognizeGarment).mockReturnValue(
       new Promise((resolve) => {
         finish = resolve
@@ -237,8 +261,8 @@ describe('guardaroba', () => {
     chooseFile('Scegli dalla galleria', new File(['foto'], 'foto.jpg', { type: 'image/jpeg' }))
     expect(screen.getByRole('button', { name: 'Guardo la foto…' })).toBeDisabled()
     fireEvent.change(screen.getByLabelText('Categoria'), { target: { value: 'giacca' } })
-    finish({ category: 'scarpe', colour: 'nero' })
-    expect(await screen.findByText('Categoria e colore sono una proposta. Puoi cambiarli.')).toBeInTheDocument()
+    finish(guess({ category: 'scarpe', colour: 'nero' }))
+    expect(await screen.findByText('Questi dati sono una proposta. Controlla e cambiali se serve.')).toBeInTheDocument()
     expect(screen.getByLabelText('Categoria')).toHaveValue('giacca')
     expect(screen.getByLabelText('Colore')).toHaveValue('nero')
   })

@@ -5,13 +5,20 @@
 import {
   CATEGORIES,
   COLOURS,
+  MATERIALS,
   OCCASIONS,
+  PATTERNS,
   SEASONS,
+  SUBTYPES,
+  subtypeFits,
   type Category,
   type Colour,
   type Garment,
+  type Material,
   type Occasion,
+  type Pattern,
   type Season,
+  type SubType,
 } from './types.ts'
 
 export type GarmentFilter = {
@@ -60,13 +67,27 @@ export type GarmentFormInput = {
   colour: string
   season: string
   occasion: string
+  /** Assente: «altro». I moduli vecchi nei test non lo mandano. */
+  subType?: string
+  /** Stringa vuota o assente: nessun secondo colore. */
+  colourSecondary?: string
+  /** Assente: «tinta unita». */
+  pattern?: string
+  /** Assente: «sconosciuto». */
+  material?: string
 }
 
-export type GarmentFormErrors = Partial<Record<'photo' | 'category' | 'colour' | 'season' | 'occasion', string>>
+export type GarmentFormErrors = Partial<
+  Record<'photo' | 'category' | 'colour' | 'season' | 'occasion' | 'subType' | 'colourSecondary' | 'pattern' | 'material', string>
+>
 
 export type GarmentChoices = {
   category: Category
   colour: Colour
+  colourSecondary: Colour | null
+  subType: SubType
+  pattern: Pattern
+  material: Material
   season: Season
   occasion: Occasion
 }
@@ -102,6 +123,20 @@ export function validateGarmentForm(input: GarmentFormInput): GarmentFormErrors 
   if (!isOneOf(input.season, SEASONS)) errors.season = 'Scegli una stagione.'
   if (!isOneOf(input.occasion, OCCASIONS)) errors.occasion = 'Scegli uno stile.'
 
+  const subType = input.subType ?? 'altro'
+  const pattern = input.pattern ?? 'tinta unita'
+  const material = input.material ?? 'sconosciuto'
+  const colourSecondary = input.colourSecondary ?? ''
+  if (!isOneOf(subType, SUBTYPES)) errors.subType = 'Scegli un tipo.'
+  else if (isOneOf(input.category, CATEGORIES) && !subtypeFits(input.category, subType)) {
+    errors.subType = 'Scegli un tipo adatto alla categoria.'
+  }
+  if (colourSecondary !== '' && !isOneOf(colourSecondary, COLOURS)) {
+    errors.colourSecondary = 'Scegli un secondo colore, oppure lascialo vuoto.'
+  }
+  if (!isOneOf(pattern, PATTERNS)) errors.pattern = 'Scegli un disegno.'
+  if (!isOneOf(material, MATERIALS)) errors.material = 'Scegli un materiale.'
+
   return errors
 }
 
@@ -110,11 +145,20 @@ export function parseGarmentForm(
 ): { ok: true; choices: GarmentChoices } | { ok: false; errors: GarmentFormErrors } {
   const errors = validateGarmentForm(input)
   if (Object.keys(errors).length > 0) return { ok: false, errors }
+  const subType = input.subType ?? 'altro'
+  const pattern = input.pattern ?? 'tinta unita'
+  const material = input.material ?? 'sconosciuto'
+  const colourSecondary = input.colourSecondary ?? ''
   if (
     !isOneOf(input.category, CATEGORIES) ||
     !isOneOf(input.colour, COLOURS) ||
     !isOneOf(input.season, SEASONS) ||
-    !isOneOf(input.occasion, OCCASIONS)
+    !isOneOf(input.occasion, OCCASIONS) ||
+    !isOneOf(subType, SUBTYPES) ||
+    !isOneOf(pattern, PATTERNS) ||
+    !isOneOf(material, MATERIALS) ||
+    (colourSecondary !== '' && !isOneOf(colourSecondary, COLOURS)) ||
+    !subtypeFits(input.category, subType)
   ) {
     return { ok: false, errors }
   }
@@ -123,6 +167,10 @@ export function parseGarmentForm(
     choices: {
       category: input.category,
       colour: input.colour,
+      colourSecondary: colourSecondary === '' || colourSecondary === input.colour ? null : colourSecondary,
+      subType,
+      pattern,
+      material,
       season: input.season,
       occasion: input.occasion,
     },

@@ -6,14 +6,20 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import {
   CATEGORIES,
   COLOURS,
+  MATERIALS,
   OCCASIONS,
+  PATTERNS,
   SEASONS,
+  SUBTYPES,
   type Category,
   type Colour,
   type Garment,
+  type Material,
   type Occasion,
   type Outfit,
+  type Pattern,
   type Season,
+  type SubType,
 } from '../domain/types.ts'
 
 export const DATABASE_NAME = 'armadio-outfit'
@@ -85,6 +91,44 @@ function assertOneOf<T extends string>(value: string, allowed: readonly T[], mes
   }
 }
 
+function isListed<T extends string>(value: unknown, allowed: readonly T[]): value is T {
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value)
+}
+
+/** I capi salvati prima di questi campi non li hanno: qui ricevono i valori di ripiego. */
+export function normalizeGarment(value: Garment): Garment {
+  const raw = value as Garment & {
+    subType?: unknown
+    colourSecondary?: unknown
+    pattern?: unknown
+    material?: unknown
+  }
+  const colourSecondary = raw.colourSecondary == null
+    ? null
+    : isListed<Colour>(raw.colourSecondary, COLOURS)
+      ? raw.colourSecondary
+      : null
+  return {
+    ...value,
+    subType: isListed<SubType>(raw.subType, SUBTYPES) ? raw.subType : 'altro',
+    colourSecondary,
+    pattern: isListed<Pattern>(raw.pattern, PATTERNS) ? raw.pattern : 'tinta unita',
+    material: isListed<Material>(raw.material, MATERIALS) ? raw.material : 'sconosciuto',
+  }
+}
+
+function prepareGarment(garment: Garment): Garment {
+  const subType = garment.subType ?? 'altro'
+  const pattern = garment.pattern ?? 'tinta unita'
+  const material = garment.material ?? 'sconosciuto'
+  const colourSecondary = garment.colourSecondary ?? null
+  assertOneOf<SubType>(subType, SUBTYPES, 'Tipo non valido.')
+  if (colourSecondary !== null) assertOneOf<Colour>(colourSecondary, COLOURS, 'Secondo colore non valido.')
+  assertOneOf<Pattern>(pattern, PATTERNS, 'Disegno non valido.')
+  assertOneOf<Material>(material, MATERIALS, 'Materiale non valido.')
+  return { ...garment, subType, colourSecondary, pattern, material }
+}
+
 function assertGarment(garment: Garment): void {
   assertId(garment.id, 'Manca l’id del capo.')
   if (!(garment.photo instanceof Blob)) {
@@ -95,6 +139,7 @@ function assertGarment(garment: Garment): void {
   assertOneOf<Season>(garment.season, SEASONS, 'Stagione non valida.')
   assertOneOf<Occasion>(garment.occasion, OCCASIONS, 'Occasione non valida.')
   assertCreatedAt(garment.createdAt, 'Data del capo non valida.')
+  prepareGarment(garment)
 }
 
 function assertOutfit(outfit: Outfit): void {
@@ -117,32 +162,35 @@ function byNewest<T extends { createdAt: string }>(items: T[]): T[] {
 export async function listGarments(): Promise<Garment[]> {
   const database = await getDatabase()
   const garments = await database.getAll('garments')
-  return byNewest(garments)
+  return byNewest(garments.map((garment) => normalizeGarment(garment)))
 }
 
 export async function getGarment(id: string): Promise<Garment | undefined> {
   const database = await getDatabase()
-  return database.get('garments', id)
+  const garment = await database.get('garments', id)
+  return garment ? normalizeGarment(garment) : undefined
 }
 
 export async function addGarment(garment: Garment): Promise<void> {
-  assertGarment(garment)
+  const stored = prepareGarment(garment)
+  assertGarment(stored)
   const database = await getDatabase()
   const existing = await database.get('garments', garment.id)
   if (existing) {
     throw new Error('Esiste già un capo con questo id.')
   }
-  await database.add('garments', garment)
+  await database.add('garments', stored)
 }
 
 export async function updateGarment(garment: Garment): Promise<void> {
-  assertGarment(garment)
+  const stored = prepareGarment(garment)
+  assertGarment(stored)
   const database = await getDatabase()
   const existing = await database.get('garments', garment.id)
   if (!existing) {
     throw new Error('Capo non trovato.')
   }
-  await database.put('garments', garment)
+  await database.put('garments', stored)
 }
 
 /** Elimina il capo. Gli outfit che lo citano restano invariati. */

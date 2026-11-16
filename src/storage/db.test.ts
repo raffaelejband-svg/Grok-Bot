@@ -1,7 +1,7 @@
 // @vitest-environment node
 // jsdom non conserva i Blob nello structured clone. Node sì, come il browser.
 import 'fake-indexeddb/auto'
-import { deleteDB } from 'idb'
+import { deleteDB, openDB } from 'idb'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Garment, Outfit } from '../domain/types.ts'
 import {
@@ -76,6 +76,42 @@ describe('archivio capi e outfit', () => {
     await deleteGarment('capo-1')
     expect(await getGarment('capo-1')).toBeUndefined()
     expect(await listGarments()).toHaveLength(1)
+  })
+
+  it('un capo vecchio, senza i campi nuovi, si legge con i valori di ripiego', async () => {
+    await listGarments()
+    await closeDatabase()
+    const database = await openDB(DATABASE_NAME, 1)
+    await database.put('garments', {
+      id: 'vecchio',
+      photo: new Blob(['vecchia'], { type: 'image/jpeg' }),
+      category: 'top',
+      colour: 'blu',
+      season: 'estate',
+      occasion: 'casual',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    database.close()
+
+    const loaded = await getGarment('vecchio')
+    expect(loaded?.subType).toBe('altro')
+    expect(loaded?.colourSecondary).toBeNull()
+    expect(loaded?.pattern).toBe('tinta unita')
+    expect(loaded?.material).toBe('sconosciuto')
+    expect(loaded?.category).toBe('top')
+  })
+
+  it('un capo nuovo senza i campi extra li riceve al salvataggio', async () => {
+    await addGarment(garment())
+    const saved = await getGarment('capo-1')
+    expect(saved?.subType).toBe('altro')
+    expect(saved?.pattern).toBe('tinta unita')
+    expect(saved?.material).toBe('sconosciuto')
+    expect(saved?.colourSecondary).toBeNull()
+  })
+
+  it('rifiuta un tipo che non è nell’elenco', async () => {
+    await expect(addGarment(garment({ subType: 'giubba' as Garment['subType'] }))).rejects.toThrow('Tipo non valido.')
   })
 
   it('salva, sostituisce ed elimina un outfit', async () => {

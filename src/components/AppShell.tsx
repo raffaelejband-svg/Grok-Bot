@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import { BottomNav } from './BottomNav.tsx'
 
 export function AppShell() {
@@ -20,6 +20,12 @@ export function AppShell() {
       </a>
       <header className="shrink-0 px-5 pt-[max(1.75rem,env(safe-area-inset-top))]">
         <p className="font-display text-3xl leading-none tracking-tight">Armadio Outfit</p>
+        <Link
+          to="/impostazioni"
+          className="mt-3 inline-flex min-h-12 items-center rounded-full px-1 text-lg font-medium text-clay outline-none focus-visible:ring-2 focus-visible:ring-clay"
+        >
+          Impostazioni
+        </Link>
       </header>
       <main
         ref={mainRef}
