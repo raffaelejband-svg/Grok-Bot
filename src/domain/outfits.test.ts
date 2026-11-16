@@ -28,10 +28,22 @@ function signature(result: GenerateOutfitResult): string {
     .join(',')
 }
 
-function expectOutfit(result: GenerateOutfitResult): SuggestedOutfit {
+type MensOutfit = SuggestedOutfit & { top: Garment; pantaloni: Garment }
+
+function expectOutfit(result: GenerateOutfitResult): MensOutfit {
   expect(result.ok).toBe(true)
   if (!result.ok) throw new Error(result.reason)
-  return result.outfit
+  return result.outfit as MensOutfit
+}
+
+function topOf(outfit: SuggestedOutfit): Garment {
+  if (!outfit.top) throw new Error('manca il top')
+  return outfit.top
+}
+
+function pantsOf(outfit: SuggestedOutfit): Garment {
+  if (!outfit.pantaloni) throw new Error('mancano i pantaloni')
+  return outfit.pantaloni
 }
 
 const basics = [
@@ -67,6 +79,47 @@ describe('generateOutfit', () => {
       'giacca',
       'accessori',
     ])
+  })
+
+  it('un vestito sostituisce top e pantaloni', () => {
+    const wardrobe = [
+      garment({ id: 'dress', category: 'vestito', colour: 'rosso', subType: 'abito' }),
+      garment({ id: 'bad-shoes', category: 'scarpe', colour: 'verde' }),
+      garment({ id: 'heels', category: 'scarpe', colour: 'nero', subType: 'tacchi' }),
+      garment({ id: 'jacket', category: 'giacca', colour: 'verde' }),
+      garment({ id: 'bag', category: 'accessori', colour: 'beige', subType: 'borsa' }),
+    ]
+    expect(requiredGarmentsReason(wardrobe, 'donna')).toBeNull()
+    expect(generateOutfit(wardrobe, 'elegante', 'estate', 1).ok).toBe(false)
+
+    const outfit = expectOutfit(generateOutfit(wardrobe, 'elegante', 'estate', 1, 'donna'))
+
+    expect(outfit.vestito?.id).toBe('dress')
+    expect(outfit.scarpe.id).toBe('heels')
+    expect(outfit.top).toBeUndefined()
+    expect(outfit.pantaloni).toBeUndefined()
+    expect(outfit.gonna).toBeUndefined()
+    expect(outfit.giacca).toBeUndefined()
+    expect(outfit.accessori?.id).toBe('bag')
+    expect(listOutfitPieces(outfit).map((piece) => piece.slot)).toEqual(['vestito', 'scarpe', 'accessori'])
+  })
+
+  it('una gonna sostituisce i pantaloni', () => {
+    const wardrobe = [
+      garment({ id: 'top', category: 'top', colour: 'bianco' }),
+      garment({ id: 'skirt', category: 'gonna', colour: 'blu', subType: 'gonna' }),
+      garment({ id: 'heels', category: 'scarpe', colour: 'nero', subType: 'tacchi' }),
+    ]
+    expect(requiredGarmentsReason(wardrobe, 'donna')).toBeNull()
+
+    const outfit = expectOutfit(generateOutfit(wardrobe, 'casual', 'estate', 2, 'donna'))
+
+    expect(outfit.top?.id).toBe('top')
+    expect(outfit.gonna?.id).toBe('skirt')
+    expect(outfit.pantaloni).toBeUndefined()
+    expect(outfit.vestito).toBeUndefined()
+    expect(outfit.scarpe.id).toBe('heels')
+    expect(listOutfitPieces(outfit).map((piece) => piece.slot)).toEqual(['top', 'gonna', 'scarpe'])
   })
 
   it('preferisce occasione e stagione, e tratta «tutte» come stagione adatta', () => {
@@ -477,7 +530,7 @@ describe('swapPiece', () => {
     garment({ id: 'shoes', category: 'scarpe', colour: 'grigio' }),
   ]
 
-  function built(): SuggestedOutfit {
+  function built(): MensOutfit {
     return expectOutfit(generateOutfit(wardrobe, 'casual', 'estate', 1))
   }
 
@@ -488,9 +541,9 @@ describe('swapPiece', () => {
 
     expect(once.swapped).toBe(true)
     expect(once.reason).toBe('Ho cambiato il top.')
-    expect(once.outfit.top.id).not.toBe(outfit.top.id)
-    expect(once.outfit.top.id).toBe(twice.outfit.top.id)
-    expect(once.outfit.pantaloni.id).toBe(outfit.pantaloni.id)
+    expect(topOf(once.outfit).id).not.toBe(outfit.top.id)
+    expect(topOf(once.outfit).id).toBe(topOf(twice.outfit).id)
+    expect(pantsOf(once.outfit).id).toBe(outfit.pantaloni.id)
     expect(once.outfit.scarpe.id).toBe(outfit.scarpe.id)
     expect(outfit.top.id).toBe(built().top.id)
   })
@@ -505,8 +558,8 @@ describe('swapPiece', () => {
     for (let seed = 1; seed <= 30; seed += 1) {
       const swapped = swapPiece(outfit, 'top', extra, seed)
       expect(swapped.swapped).toBe(true)
-      expect(swapped.outfit.top.id).not.toBe(outfit.top.id)
-      chosen.add(swapped.outfit.top.id)
+      expect(topOf(swapped.outfit).id).not.toBe(outfit.top.id)
+      chosen.add(topOf(swapped.outfit).id)
     }
     expect(chosen.size).toBeGreaterThan(1)
   })
@@ -519,7 +572,7 @@ describe('swapPiece', () => {
     ]
     const swapped = swapPiece(outfit, 'top', withLoose, 7)
 
-    expect(swapped.outfit.top.id).not.toBe('top-sport')
+    expect(topOf(swapped.outfit).id).not.toBe('top-sport')
     expect(swapped.outfit.relaxed).toBe('none')
   })
 
@@ -534,7 +587,7 @@ describe('swapPiece', () => {
     const swapped = swapPiece(outfit, 'top', only, 2)
 
     expect(swapped.swapped).toBe(true)
-    expect(swapped.outfit.top.id).toBe('top-sport')
+    expect(topOf(swapped.outfit).id).toBe('top-sport')
     expect(swapped.outfit.relaxed).toBe('occasion')
   })
 
@@ -550,7 +603,7 @@ describe('swapPiece', () => {
 
     const blocked = swapPiece(outfit, 'top', clashing, 4)
     expect(blocked.swapped).toBe(false)
-    expect(blocked.outfit.top.id).toBe('top')
+    expect(topOf(blocked.outfit).id).toBe('top')
     expect(blocked.reason).toBe('Non ho un altro capo che stia bene in questo outfit.')
 
     const single = swapPiece(outfit, 'pantaloni', clashing, 4)

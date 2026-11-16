@@ -2,12 +2,16 @@
  * Allinea il guardaroba sul dispositivo con quello dell’account.
  * Il primo caricamento dei capi già presenti chiede il permesso: non parte da solo.
  */
-import type { Garment, Outfit } from '../domain/types.ts'
+import type { Garment, Outfit, Profile } from '../domain/types.ts'
 import {
-  listGarments,
-  listOutfits,
+  listAllGarments,
+  listAllOutfits,
+  listProfiles,
+  preferProfileWithClothesIfUntouched,
   putGarmentFromCloud,
   putOutfitFromCloud,
+  putProfileFromCloud,
+  removeProfileFromCloud,
   removeGarmentFromCloud,
   removeOutfitFromCloud,
 } from '../storage/db.ts'
@@ -23,7 +27,7 @@ import {
   type IdBucket,
 } from './deviceState.ts'
 import { PhotoTooLargeError } from './photoLimit.ts'
-import { planSync, type SyncPlan } from './plan.ts'
+import { planProfileSync, planSync, type SyncPlan } from './plan.ts'
 import { garmentFromCloud, stampOf, type CloudGarmentRecord } from './records.ts'
 import { applyCloudSettings, settingsForCloud, type CloudSettings } from './secrets.ts'
 import type { KeyValueStore } from './store.ts'
@@ -85,7 +89,7 @@ async function uploadGarments(
   warn: (kind: Exclude<SyncWarning, 'both'>) => void,
 ): Promise<void> {
   if (ids.length === 0) return
-  const local = new Map((await listGarments()).map((garment) => [garment.id, garment]))
+  const local = new Map((await listAllGarments()).map((garment) => [garment.id, garment]))
   let index = 0
   for (const id of ids) {
     const garment = local.get(id)
@@ -119,7 +123,7 @@ async function uploadOutfits(
   warn: (kind: Exclude<SyncWarning, 'both'>) => void,
 ): Promise<void> {
   if (ids.length === 0) return
-  const local = new Map((await listOutfits()).map((outfit) => [outfit.id, outfit]))
+  const local = new Map((await listAllOutfits()).map((outfit) => [outfit.id, outfit]))
   let index = 0
   for (const id of ids) {
     const outfit = local.get(id)
@@ -164,8 +168,10 @@ async function syncSettings(
 async function retryDeletes(session: Session, storage: KeyValueStore, warn: (kind: Exclude<SyncWarning, 'both'>) => void): Promise<void> {
   const garmentDeletes = readIds(storage, session.uid, 'pending-garment-deletes')
   const outfitDeletes = readIds(storage, session.uid, 'pending-outfit-deletes')
+  const profileDeletes = readIds(storage, session.uid, 'pending-profile-deletes')
   const garmentsLeft: string[] = []
   const outfitsLeft: string[] = []
+  const profilesLeft: string[] = []
   for (const id of garmentDeletes) {
     try {
       await session.backend.deleteGarment(session.uid, id)
@@ -182,8 +188,63 @@ async function retryDeletes(session: Session, storage: KeyValueStore, warn: (kin
       warn('incomplete')
     }
   }
+  for (const id of profileDeletes) {
+    try {
+      await session.backend.deleteProfile(session.uid, id)
+    } catch {
+      profilesLeft.push(id)
+      warn('incomplete')
+    }
+  }
   writeIds(storage, session.uid, 'pending-garment-deletes', garmentsLeft)
   writeIds(storage, session.uid, 'pending-outfit-deletes', outfitsLeft)
+  writeIds(storage, session.uid, 'pending-profile-deletes', profilesLeft)
+}
+
+async function syncProfiles(
+  session: Session,
+  storage: KeyValueStore,
+  decision: ReturnType<typeof readDecision>,
+  cloudProfiles: readonly Profile[],
+  warn: (kind: Exclude<SyncWarning, 'both'>) => void,
+): Promise<void> {
+  const localProfiles = await listProfiles()
+  const shared = new Set(readIds(storage, session.uid, 'shared-profiles'))
+  const pending = new Set(readIds(storage, session.uid, 'pending-profile-deletes'))
+  const visibleCloud = cloudProfiles.filter((profile) => !pending.has(profile.id))
+  const plan = planProfileSync({
+    local: localProfiles.map((profile) => stampOf(profile)),
+    cloud: visibleCloud.map((profile) => stampOf(profile)),
+    decision,
+    privateIds: readIds(storage, session.uid, 'private-profiles'),
+    sharedIds: [...shared],
+  })
+  for (const id of plan.deleteLocalIds) {
+    const removed = await removeProfileFromCloud(id)
+    if (removed) shared.delete(id)
+  }
+  for (const id of plan.downloadIds) {
+    const profile = visibleCloud.find((item) => item.id === id)
+    if (!profile) continue
+    try {
+      await putProfileFromCloud(profile)
+      shared.add(id)
+    } catch {
+      warn('incomplete')
+    }
+  }
+  const localAfter = new Map((await listProfiles()).map((profile) => [profile.id, profile]))
+  for (const id of plan.uploadIds) {
+    const profile = localAfter.get(id)
+    if (!profile) continue
+    try {
+      await session.backend.saveProfile(session.uid, profile)
+      shared.add(id)
+    } catch {
+      warn('incomplete')
+    }
+  }
+  remember(storage, session.uid, 'shared-profiles', shared)
 }
 
 async function reconcileLocked(storage: KeyValueStore, hooks: SyncHooks): Promise<SyncSnapshot> {
@@ -202,9 +263,11 @@ async function reconcileLocked(storage: KeyValueStore, hooks: SyncHooks): Promis
 
   await retryDeletes(session, storage, warn)
 
+  let cloudProfiles: Profile[]
   let cloudGarments: CloudGarmentRecord[]
   let cloudOutfits: Outfit[]
   try {
+    cloudProfiles = await session.backend.listProfiles(session.uid)
     cloudGarments = await session.backend.listGarments(session.uid)
     cloudOutfits = await session.backend.listOutfits(session.uid)
   } catch {
@@ -215,8 +278,8 @@ async function reconcileLocked(storage: KeyValueStore, hooks: SyncHooks): Promis
   cloudGarments = cloudGarments.filter((garment) => !pendingGarmentDeletes.has(garment.id))
   cloudOutfits = cloudOutfits.filter((outfit) => !pendingOutfitDeletes.has(outfit.id))
 
-  const localGarments = await listGarments()
-  const localOutfits = await listOutfits()
+  const localGarments = await listAllGarments()
+  const localOutfits = await listAllOutfits()
   const sharedGarments = new Set(readIds(storage, session.uid, 'shared-garments'))
   const sharedOutfits = new Set(readIds(storage, session.uid, 'shared-outfits'))
   const localGarmentIds = new Set(localGarments.map((garment) => garment.id))
@@ -254,6 +317,8 @@ async function reconcileLocked(storage: KeyValueStore, hooks: SyncHooks): Promis
     plan = planSync({ ...input, decision })
   }
 
+  await syncProfiles(session, storage, decision, cloudProfiles, warn)
+
   for (const id of plan.deleteLocalGarmentIds) {
     await removeGarmentFromCloud(id)
     sharedGarments.delete(id)
@@ -272,7 +337,7 @@ async function reconcileLocked(storage: KeyValueStore, hooks: SyncHooks): Promis
     photoIndex += 1
     hooks.onProgress?.(`Scarico il capo ${photoIndex} di ${plan.downloadGarmentIds.length}…`)
     try {
-      const photo = await session.backend.getGarmentPhoto(session.uid, id)
+      const photo = await session.backend.getGarmentPhoto(session.uid, record.profileId, id)
       await putGarmentFromCloud(garmentFromCloud(record, photo))
       sharedGarments.add(id)
     } catch {
@@ -300,6 +365,7 @@ async function reconcileLocked(storage: KeyValueStore, hooks: SyncHooks): Promis
   remember(storage, session.uid, 'shared-garments', sharedGarments)
   remember(storage, session.uid, 'shared-outfits', sharedOutfits)
   await syncSettings(session, storage, warn)
+  await preferProfileWithClothesIfUntouched()
 
   const manualUpload = decision === 'declined'
     && (privateGarments.some((id) => localGarmentIds.has(id)) || privateOutfits.some((id) => localOutfitIds.has(id)))
@@ -317,6 +383,7 @@ export function acceptDeviceUpload(storage: KeyValueStore, hooks: SyncHooks = {}
     writeDecision(storage, active.uid, 'accepted')
     writeIds(storage, active.uid, 'private-garments', [])
     writeIds(storage, active.uid, 'private-outfits', [])
+    writeIds(storage, active.uid, 'private-profiles', [])
     return reconcileLocked(storage, hooks)
   })
 }
@@ -326,14 +393,17 @@ export function declineDeviceUpload(storage: KeyValueStore, hooks: SyncHooks = {
     if (!active) return idleSnapshot
     let cloudGarmentIds = new Set<string>()
     let cloudOutfitIds = new Set<string>()
+    let cloudProfileIds = new Set<string>()
     try {
+      cloudProfileIds = new Set((await active.backend.listProfiles(active.uid)).map((profile) => profile.id))
       cloudGarmentIds = new Set((await active.backend.listGarments(active.uid)).map((garment) => garment.id))
       cloudOutfitIds = new Set((await active.backend.listOutfits(active.uid)).map((outfit) => outfit.id))
     } catch {
       return { blocked: false, offer: null, manualUpload: false, warning: 'incomplete' }
     }
-    const localGarments = await listGarments()
-    const localOutfits = await listOutfits()
+    const localGarments = await listAllGarments()
+    const localOutfits = await listAllOutfits()
+    const localProfiles = await listProfiles()
     writeDecision(storage, active.uid, 'declined')
     writeIds(
       storage,
@@ -346,6 +416,12 @@ export function declineDeviceUpload(storage: KeyValueStore, hooks: SyncHooks = {
       active.uid,
       'private-outfits',
       localOutfits.filter((outfit) => !cloudOutfitIds.has(outfit.id)).map((outfit) => outfit.id),
+    )
+    writeIds(
+      storage,
+      active.uid,
+      'private-profiles',
+      localProfiles.filter((profile) => !cloudProfileIds.has(profile.id)).map((profile) => profile.id),
     )
     return reconcileLocked(storage, hooks)
   })
@@ -364,14 +440,22 @@ async function pushLocked(change: LocalChange, storage: KeyValueStore): Promise<
     return
   }
   if (change.kind === 'garment-delete') {
-    await pushGarmentDelete(session, storage, change.id, decision)
+    await pushGarmentDelete(session, storage, change.id, change.profileId, decision)
     return
   }
   if (change.kind === 'outfit-put') {
     await pushOutfit(session, storage, change.outfit, decision)
     return
   }
-  await pushOutfitDelete(session, storage, change.id, decision)
+  if (change.kind === 'outfit-delete') {
+    await pushOutfitDelete(session, storage, change.id, change.profileId, decision)
+    return
+  }
+  if (change.kind === 'profile-put') {
+    await pushProfile(session, storage, change.profile, decision)
+    return
+  }
+  await pushProfileDelete(session, storage, change.id, decision)
 }
 
 async function pushGarment(session: Session, storage: KeyValueStore, garment: Garment, decision: ReturnType<typeof readDecision>): Promise<void> {
@@ -394,7 +478,13 @@ async function pushGarment(session: Session, storage: KeyValueStore, garment: Ga
   }
 }
 
-async function pushGarmentDelete(session: Session, storage: KeyValueStore, id: string, decision: ReturnType<typeof readDecision>): Promise<void> {
+async function pushGarmentDelete(
+  session: Session,
+  storage: KeyValueStore,
+  id: string,
+  profileId: string | undefined,
+  decision: ReturnType<typeof readDecision>,
+): Promise<void> {
   const privateIds = new Set(readIds(storage, session.uid, 'private-garments'))
   privateIds.delete(id)
   remember(storage, session.uid, 'private-garments', privateIds)
@@ -405,7 +495,7 @@ async function pushGarmentDelete(session: Session, storage: KeyValueStore, id: s
     return
   }
   try {
-    await session.backend.deleteGarment(session.uid, id)
+    await session.backend.deleteGarment(session.uid, id, profileId)
     shared.delete(id)
     remember(storage, session.uid, 'shared-garments', shared)
   } catch {
@@ -429,7 +519,13 @@ async function pushOutfit(session: Session, storage: KeyValueStore, outfit: Outf
   }
 }
 
-async function pushOutfitDelete(session: Session, storage: KeyValueStore, id: string, decision: ReturnType<typeof readDecision>): Promise<void> {
+async function pushOutfitDelete(
+  session: Session,
+  storage: KeyValueStore,
+  id: string,
+  profileId: string | undefined,
+  decision: ReturnType<typeof readDecision>,
+): Promise<void> {
   const privateIds = new Set(readIds(storage, session.uid, 'private-outfits'))
   privateIds.delete(id)
   remember(storage, session.uid, 'private-outfits', privateIds)
@@ -440,12 +536,47 @@ async function pushOutfitDelete(session: Session, storage: KeyValueStore, id: st
     return
   }
   try {
-    await session.backend.deleteOutfit(session.uid, id)
+    await session.backend.deleteOutfit(session.uid, id, profileId)
     shared.delete(id)
     remember(storage, session.uid, 'shared-outfits', shared)
   } catch {
     const pending = new Set(readIds(storage, session.uid, 'pending-outfit-deletes'))
     pending.add(id)
     remember(storage, session.uid, 'pending-outfit-deletes', pending)
+  }
+}
+
+async function pushProfile(session: Session, storage: KeyValueStore, profile: Profile, decision: ReturnType<typeof readDecision>): Promise<void> {
+  const privateIds = new Set(readIds(storage, session.uid, 'private-profiles'))
+  if (privateIds.has(profile.id)) return
+  const shared = new Set(readIds(storage, session.uid, 'shared-profiles'))
+  if (decision === null && !shared.has(profile.id)) return
+  try {
+    await session.backend.saveProfile(session.uid, profile)
+    shared.add(profile.id)
+    remember(storage, session.uid, 'shared-profiles', shared)
+  } catch {
+    // Il prossimo aggiornamento riprova.
+  }
+}
+
+async function pushProfileDelete(session: Session, storage: KeyValueStore, id: string, decision: ReturnType<typeof readDecision>): Promise<void> {
+  const privateIds = new Set(readIds(storage, session.uid, 'private-profiles'))
+  privateIds.delete(id)
+  remember(storage, session.uid, 'private-profiles', privateIds)
+  const shared = new Set(readIds(storage, session.uid, 'shared-profiles'))
+  if (decision === null && !shared.has(id)) {
+    shared.delete(id)
+    remember(storage, session.uid, 'shared-profiles', shared)
+    return
+  }
+  try {
+    await session.backend.deleteProfile(session.uid, id)
+    shared.delete(id)
+    remember(storage, session.uid, 'shared-profiles', shared)
+  } catch {
+    const pending = new Set(readIds(storage, session.uid, 'pending-profile-deletes'))
+    pending.add(id)
+    remember(storage, session.uid, 'pending-profile-deletes', pending)
   }
 }

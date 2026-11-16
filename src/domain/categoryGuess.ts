@@ -30,6 +30,10 @@ const LABEL_INFO: Record<string, LabelInfo> = {
 
   'jean, blue jean, denim': { category: 'pantaloni', subType: 'jeans', material: 'denim' },
   'swimming trunks, bathing trunks': { category: 'pantaloni', subType: 'shorts' },
+  'miniskirt, mini-skirt': { category: 'gonna', subType: 'minigonna' },
+  'hoopskirt, crinoline': { category: 'gonna', subType: 'gonna lunga' },
+  overskirt: { category: 'gonna', subType: 'gonna' },
+  sarong: { category: 'gonna', subType: 'gonna' },
 
   cardigan: { category: 'giacca', subType: 'cardigan' },
   'suit, suit of clothes': { category: 'giacca', subType: 'blazer', occasion: 'elegante' },

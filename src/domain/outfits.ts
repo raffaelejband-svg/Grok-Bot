@@ -2,9 +2,9 @@
  * Compone un outfit con i capi che la persona ha già.
  * Stesso seme, stesso risultato. Un seme nuovo può scegliere un’altra combinazione.
  */
-import type { Category, Colour, Garment, Material, Occasion, Pattern, Season } from './types.ts'
+import type { Category, Colour, Garment, Gender, Material, Occasion, Pattern, Season } from './types.ts'
 
-const PIECE_ORDER = ['top', 'pantaloni', 'scarpe', 'giacca', 'accessori'] as const satisfies readonly Category[]
+const PIECE_ORDER = ['vestito', 'top', 'gonna', 'pantaloni', 'scarpe', 'giacca', 'accessori'] as const satisfies readonly Category[]
 const REQUIRED_SLOTS = ['top', 'pantaloni', 'scarpe'] as const satisfies readonly Category[]
 
 /**
@@ -32,14 +32,26 @@ const REQUIRED_LABELS = {
 const SWAP_DONE: Record<Category, string> = {
   top: 'Ho cambiato il top.',
   pantaloni: 'Ho cambiato i pantaloni.',
+  gonna: 'Ho cambiato la gonna.',
+  vestito: 'Ho cambiato il vestito.',
   scarpe: 'Ho cambiato le scarpe.',
   giacca: 'Ho cambiato la giacca.',
   accessori: 'Ho cambiato l’accessorio.',
 }
 
+const WOMENS_FORMULAS = [
+  ['vestito', 'scarpe'],
+  ['top', 'gonna', 'scarpe'],
+  ['top', 'pantaloni', 'scarpe'],
+] as const satisfies readonly (readonly Category[])[]
+
 export type SuggestedOutfit = {
-  top: Garment
-  pantaloni: Garment
+  /** Assente quando il look è un vestito. */
+  top?: Garment
+  /** Assente quando il look è un vestito o una gonna. */
+  pantaloni?: Garment
+  gonna?: Garment
+  vestito?: Garment
   scarpe: Garment
   giacca?: Garment
   accessori?: Garment
@@ -62,20 +74,49 @@ export type SwapPieceResult = {
 type Relaxation = 0 | 1 | 2
 
 type CorePieces = {
-  top: Garment
-  pantaloni: Garment
+  top?: Garment
+  pantaloni?: Garment
+  gonna?: Garment
+  vestito?: Garment
   scarpe: Garment
   giacca?: Garment
   accessori?: Garment
 }
 
-/** Null se top, pantaloni e scarpe ci sono già. Altrimenti il testo per la schermata vuota. */
-export function requiredGarmentsReason(garments: readonly Garment[]): string | null {
+/** Null se l’outfit si può comporre. Altrimenti il testo per la schermata vuota. */
+export function requiredGarmentsReason(garments: readonly Garment[], gender: Gender = 'uomo'): string | null {
+  if (gender === 'donna') return womenGap(garments)
   const missing = REQUIRED_SLOTS.filter((slot) => !garments.some((garment) => garment.category === slot))
   if (missing.length === 0) return null
   const names = missing.map((slot) => REQUIRED_LABELS[slot])
   const verb = missing.length === 1 ? 'Aggiungilo' : 'Aggiungili'
   return `Per un outfit servono ${joinItalian(names)}. ${verb} nel guardaroba.`
+}
+
+function hasCategory(garments: readonly Garment[], slot: Category): boolean {
+  return garments.some((garment) => garment.category === slot)
+}
+
+function womenGap(garments: readonly Garment[]): string | null {
+  if (WOMENS_FORMULAS.some((formula) => formula.every((slot) => hasCategory(garments, slot)))) return null
+  const hasDress = hasCategory(garments, 'vestito')
+  const hasTop = hasCategory(garments, 'top')
+  const hasSkirt = hasCategory(garments, 'gonna')
+  const hasPants = hasCategory(garments, 'pantaloni')
+  const hasShoes = hasCategory(garments, 'scarpe')
+  const hasBody = hasDress || (hasTop && (hasSkirt || hasPants))
+  if (!hasShoes && !hasDress && !hasTop && !hasSkirt && !hasPants) {
+    return 'Per un outfit servono un vestito e un paio di scarpe, oppure un top con una gonna o dei pantaloni e le scarpe. Aggiungili nel guardaroba.'
+  }
+  const missing: string[] = []
+  if (!hasShoes) missing.push('un paio di scarpe')
+  if (!hasBody) {
+    if (hasTop) missing.push('una gonna o un paio di pantaloni')
+    else if (hasSkirt || hasPants) missing.push('un top, oppure un vestito')
+    else missing.push('un vestito, oppure un top con una gonna o dei pantaloni')
+  }
+  const verb = missing.length === 1 ? 'Aggiungilo' : 'Aggiungili'
+  return `Per un outfit servono ${joinItalian(missing)}. ${verb} nel guardaroba.`
 }
 
 export function listOutfitPieces(outfit: SuggestedOutfit): Array<{ slot: Category; garment: Garment }> {
@@ -92,8 +133,9 @@ export function generateOutfit(
   occasion: Occasion,
   season: Season,
   seed: number,
+  gender: Gender = 'uomo',
 ): GenerateOutfitResult {
-  const missing = requiredGarmentsReason(garments)
+  const missing = requiredGarmentsReason(garments, gender)
   if (missing) return { ok: false, reason: missing }
 
   const random = mulberry32(seed)
@@ -104,7 +146,10 @@ export function generateOutfit(
   ]
   for (const level of [0, 1, 2] as const) {
     for (const harmony of harmonies) {
-      const pieces = assemble(garments, occasion, season, level, random, harmony)
+      const pieces =
+        gender === 'donna'
+          ? assembleWomen(garments, occasion, season, level, random, harmony)
+          : assemble(garments, occasion, season, level, random, harmony)
       if (!pieces) continue
       return { ok: true, outfit: finishOutfit(pieces, occasion, season) }
     }
@@ -151,12 +196,20 @@ export function swapPiece(
 }
 
 function finishOutfit(pieces: CorePieces, occasion: Occasion, season: Season): SuggestedOutfit {
-  const chosen = [pieces.top, pieces.pantaloni, pieces.scarpe, pieces.giacca, pieces.accessori].filter(
-    (garment): garment is Garment => garment !== undefined,
-  )
+  const chosen = [
+    pieces.vestito,
+    pieces.top,
+    pieces.gonna,
+    pieces.pantaloni,
+    pieces.scarpe,
+    pieces.giacca,
+    pieces.accessori,
+  ].filter((garment): garment is Garment => garment !== undefined)
   return {
-    top: pieces.top,
-    pantaloni: pieces.pantaloni,
+    ...(pieces.top ? { top: pieces.top } : {}),
+    ...(pieces.pantaloni ? { pantaloni: pieces.pantaloni } : {}),
+    ...(pieces.gonna ? { gonna: pieces.gonna } : {}),
+    ...(pieces.vestito ? { vestito: pieces.vestito } : {}),
     scarpe: pieces.scarpe,
     ...(pieces.giacca ? { giacca: pieces.giacca } : {}),
     ...(pieces.accessori ? { accessori: pieces.accessori } : {}),
@@ -214,6 +267,82 @@ function assemble(
   }
 
   return null
+}
+
+function assembleWomen(
+  garments: readonly Garment[],
+  occasion: Occasion,
+  season: Season,
+  level: Relaxation,
+  random: () => number,
+  harmony: Harmony,
+): CorePieces | null {
+  const found: CorePieces[] = []
+  for (const formula of WOMENS_FORMULAS) {
+    const pieces = assembleFormula(garments, formula, occasion, season, level, random, harmony)
+    if (pieces) found.push(pieces)
+  }
+  if (found.length === 0) return null
+  if (found.length === 1) return found[0] ?? null
+  return found[Math.floor(random() * found.length)] ?? null
+}
+
+function assembleFormula(
+  garments: readonly Garment[],
+  slots: readonly Category[],
+  occasion: Occasion,
+  season: Season,
+  level: Relaxation,
+  random: () => number,
+  harmony: Harmony,
+): CorePieces | null {
+  const pools = slots.map((slot) =>
+    garments.filter((garment) => garment.category === slot && minimumLevel(garment, occasion, season) <= level),
+  )
+  if (pools.some((pool) => pool.length === 0)) return null
+  const ordered = pools.map((pool) => shuffledByPreference(pool, occasion, season, random))
+  const chosen = firstCombination(ordered, harmony)
+  if (!chosen) return null
+  const scarpe = chosen[slots.indexOf('scarpe')]
+  if (!scarpe) return null
+  const bySlot = new Map(slots.map((slot, index) => [slot, chosen[index]]))
+  const giacca = firstThatFits(garments, 'giacca', occasion, season, level, chosen, random, harmony)
+  const withJacket = giacca ? [...chosen, giacca] : chosen
+  const accessori = firstThatFits(garments, 'accessori', occasion, season, level, withJacket, random, harmony)
+  const top = bySlot.get('top')
+  const pantaloni = bySlot.get('pantaloni')
+  const gonna = bySlot.get('gonna')
+  const vestito = bySlot.get('vestito')
+  return {
+    scarpe,
+    ...(top ? { top } : {}),
+    ...(pantaloni ? { pantaloni } : {}),
+    ...(gonna ? { gonna } : {}),
+    ...(vestito ? { vestito } : {}),
+    ...(giacca ? { giacca } : {}),
+    ...(accessori ? { accessori } : {}),
+  }
+}
+
+function firstCombination(pools: readonly Garment[][], harmony: Harmony): Garment[] | null {
+  const chosen: Garment[] = []
+  function walk(index: number): Garment[] | null {
+    if (index >= pools.length) return groupFits(chosen, harmony) ? [...chosen] : null
+    const pool = pools[index]
+    if (!pool) return null
+    for (const candidate of pool) {
+      chosen.push(candidate)
+      if (!groupFits(chosen, harmony)) {
+        chosen.pop()
+        continue
+      }
+      const found = walk(index + 1)
+      if (found) return found
+      chosen.pop()
+    }
+    return null
+  }
+  return walk(0)
 }
 
 function firstThatFits(
@@ -377,6 +506,10 @@ function readPiece(outfit: SuggestedOutfit, slot: Category): Garment | undefined
       return outfit.top
     case 'pantaloni':
       return outfit.pantaloni
+    case 'gonna':
+      return outfit.gonna
+    case 'vestito':
+      return outfit.vestito
     case 'scarpe':
       return outfit.scarpe
     case 'giacca':
@@ -392,8 +525,10 @@ function readPiece(outfit: SuggestedOutfit, slot: Category): Garment | undefined
 
 function replacePiece(outfit: SuggestedOutfit, slot: Category, garment: Garment): CorePieces {
   const next: CorePieces = {
-    top: outfit.top,
-    pantaloni: outfit.pantaloni,
+    ...(outfit.top ? { top: outfit.top } : {}),
+    ...(outfit.pantaloni ? { pantaloni: outfit.pantaloni } : {}),
+    ...(outfit.gonna ? { gonna: outfit.gonna } : {}),
+    ...(outfit.vestito ? { vestito: outfit.vestito } : {}),
     scarpe: outfit.scarpe,
     ...(outfit.giacca ? { giacca: outfit.giacca } : {}),
     ...(outfit.accessori ? { accessori: outfit.accessori } : {}),
@@ -404,6 +539,12 @@ function replacePiece(outfit: SuggestedOutfit, slot: Category, garment: Garment)
       break
     case 'pantaloni':
       next.pantaloni = garment
+      break
+    case 'gonna':
+      next.gonna = garment
+      break
+    case 'vestito':
+      next.vestito = garment
       break
     case 'scarpe':
       next.scarpe = garment

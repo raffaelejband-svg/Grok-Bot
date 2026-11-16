@@ -19,6 +19,7 @@ type GarmentFiltersProps = {
   filter: GarmentFilter
   total: number
   visible: number
+  categories?: readonly Category[]
   onChange: (filter: GarmentFilter) => void
 }
 
@@ -61,7 +62,7 @@ function FilterSelect<T extends string>({ label, value, options, labels, onChang
   )
 }
 
-export function GarmentFilters({ filter, total, visible, onChange }: GarmentFiltersProps) {
+export function GarmentFilters({ filter, total, visible, categories = CATEGORIES, onChange }: GarmentFiltersProps) {
   const [open, setOpen] = useState(false)
   const summary = visible === total ? capoCount(total) : `${capoCount(visible)} di ${total}`
   const active = hasGarmentFilter(filter)
@@ -112,7 +113,7 @@ export function GarmentFilters({ filter, total, visible, onChange }: GarmentFilt
             <FilterSelect<Category>
               label="Categoria"
               value={filter.category}
-              options={CATEGORIES}
+              options={categories}
               labels={CATEGORY_LABELS}
               onChange={(category) => onChange({ ...filter, category })}
             />

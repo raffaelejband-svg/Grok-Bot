@@ -2,7 +2,7 @@
 import 'fake-indexeddb/auto'
 import { deleteDB } from 'idb'
 import { beforeEach, describe, expect, it } from 'vitest'
-import type { Garment, Outfit } from '../domain/types.ts'
+import type { Garment, Outfit, Profile } from '../domain/types.ts'
 import { GEMINI_KEY_STORAGE } from '../vision/apiKey.ts'
 import { DATABASE_NAME, addGarment, closeDatabase, getGarment, listGarments, listOutfits } from '../storage/db.ts'
 import { setLocalChangeListener } from '../storage/syncBridge.ts'
@@ -50,16 +50,34 @@ function garment(overrides: Partial<Garment> = {}): Garment {
 function fakeBackend() {
   const garments = new Map<string, { record: CloudGarmentRecord; photo: Blob }>()
   const outfits = new Map<string, Outfit>()
+  const profiles = new Map<string, Profile>()
   let settings: CloudSettings | null = null
   const saves: Garment[] = []
+  const profileSaves: Profile[] = []
   const settingsSaves: CloudSettings[] = []
   let lists = 0
   const backend: CloudBackend = {
+    async listProfiles() {
+      return [...profiles.values()]
+    },
+    async saveProfile(_uid, profile) {
+      profileSaves.push(profile)
+      profiles.set(profile.id, profile)
+    },
+    async deleteProfile(_uid, id) {
+      profiles.delete(id)
+      for (const [garmentId, item] of garments) {
+        if (item.record.profileId === id) garments.delete(garmentId)
+      }
+      for (const [outfitId, outfit] of outfits) {
+        if (outfit.profileId === id) outfits.delete(outfitId)
+      }
+    },
     async listGarments() {
       lists += 1
       return [...garments.values()].map((item) => item.record)
     },
-    async getGarmentPhoto(_uid, id) {
+    async getGarmentPhoto(_uid, _profileId, id) {
       const found = garments.get(id)
       if (!found) throw new Error('manca la foto')
       return found.photo
@@ -88,7 +106,19 @@ function fakeBackend() {
       settings = next
     },
   }
-  return { backend, garments, outfits, saves, settingsSaves, lists: () => lists, setSettings: (next: CloudSettings | null) => { settings = next } }
+  return {
+    backend,
+    garments,
+    outfits,
+    profiles,
+    saves,
+    profileSaves,
+    settingsSaves,
+    lists: () => lists,
+    setSettings: (next: CloudSettings | null) => {
+      settings = next
+    },
+  }
 }
 
 beforeEach(async () => {
@@ -111,6 +141,7 @@ describe('sincronizzazione', () => {
 
     await acceptDeviceUpload(storage)
     expect(cloud.saves.map((item) => item.id)).toEqual(['capo-1'])
+    expect(cloud.profileSaves.map((profile) => profile.id)).toContain('il-mio-profilo')
     expect(readDecision(storage, 'io')).toBe('accepted')
   })
 
@@ -176,6 +207,8 @@ describe('sincronizzazione', () => {
 
     expect(cloud.settingsSaves).toHaveLength(1)
     expect(JSON.stringify(cloud.settingsSaves)).not.toContain('segreto-gemini')
+    expect(JSON.stringify(cloud.profileSaves)).not.toContain('segreto-gemini')
+    expect(cloud.profileSaves.some((profile) => profile.name === 'Il mio profilo')).toBe(true)
     expect(cloud.settingsSaves[0]?.values).toEqual({ promemoria: 'lana' })
     expect(storage.getItem(GEMINI_KEY_STORAGE)).toBe('segreto-gemini')
     expect(storage.dump()).toContain('segreto-gemini')

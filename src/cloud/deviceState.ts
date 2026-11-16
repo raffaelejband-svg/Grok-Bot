@@ -6,11 +6,14 @@ export type Decision = 'accepted' | 'declined'
 export type IdBucket =
   | 'private-garments'
   | 'private-outfits'
+  | 'private-profiles'
   | 'shared-garments'
   | 'shared-outfits'
+  | 'shared-profiles'
   | 'skipped-photos'
   | 'pending-garment-deletes'
   | 'pending-outfit-deletes'
+  | 'pending-profile-deletes'
 
 const LAST_UID_KEY = 'armadio-outfit.last-uid'
 

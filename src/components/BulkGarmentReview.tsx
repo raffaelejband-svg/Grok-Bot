@@ -14,12 +14,16 @@ import {
   SEASON_LABELS,
   SEASONS,
   SUBTYPE_LABELS,
+  SUBTYPES,
+  categoriesForGender,
   subtypeFits,
-  subtypesForCategory,
+  subtypesForGender,
   type Category,
   type Garment,
+  type Gender,
   type SubType,
 } from '../domain/types.ts'
+import { useProfiles } from '../profiles/context.tsx'
 import type { GarmentGuess } from '../vision/guess.ts'
 import { recognizeGarment } from '../vision/recognizeGarment.ts'
 import { primaryButtonClass, secondaryButtonClass } from './buttonStyles.ts'
@@ -55,8 +59,16 @@ function createId(): string {
   return `capo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-function draftFromFile(file: File, guess: GarmentGuess | null): Draft {
-  const category = guess?.category ?? ''
+function keepCurrent<T extends string>(options: readonly T[], current: string, known: readonly string[]): readonly T[] {
+  if (current !== '' && known.includes(current) && !(options as readonly string[]).includes(current)) {
+    return [...options, current as T]
+  }
+  return options
+}
+
+function draftFromFile(file: File, guess: GarmentGuess | null, gender: Gender): Draft {
+  const allowed = categoriesForGender(gender)
+  const category = guess?.category && (allowed as readonly string[]).includes(guess.category) ? guess.category : ''
   const subType = guess?.subType && category !== '' && subtypeFits(category as Category, guess.subType)
     ? guess.subType
     : 'altro'
@@ -116,6 +128,8 @@ export function BulkGarmentReview({ files, skipped, onCancel, onSave }: BulkGarm
   const [fieldErrors, setFieldErrors] = useState<Record<string, GarmentFormErrors>>({})
   const [done, setDone] = useState<number | null>(null)
   const alive = useRef(true)
+  const { active } = useProfiles()
+  const gender = active.gender
 
   useEffect(() => {
     alive.current = true
@@ -133,12 +147,12 @@ export function BulkGarmentReview({ files, skipped, onCancel, onSave }: BulkGarm
         setProgress(`Riconosco la foto ${index + 1} di ${files.length}…`)
         let guess: GarmentGuess | null = null
         try {
-          guess = await recognizeGarment(files[index]!)
+          guess = await recognizeGarment(files[index]!, gender)
         } catch {
           guess = null
         }
         if (cancelled) return
-        next.push(draftFromFile(files[index]!, guess))
+        next.push(draftFromFile(files[index]!, guess, gender))
         setDrafts([...next])
       }
       if (cancelled) return
@@ -148,7 +162,7 @@ export function BulkGarmentReview({ files, skipped, onCancel, onSave }: BulkGarm
     return () => {
       cancelled = true
     }
-  }, [files])
+  }, [files, gender])
 
   function update(key: string, patch: Partial<Draft>) {
     setDrafts((current) => current.map((draft) => (draft.key === key ? { ...draft, ...patch } : draft)))
@@ -259,7 +273,8 @@ export function BulkGarmentReview({ files, skipped, onCancel, onSave }: BulkGarm
         {drafts.map((draft, index) => {
           const photoNumber = index + 1
           const category = (CATEGORIES as readonly string[]).includes(draft.category) ? (draft.category as Category) : ''
-          const subtypeOptions = subtypesForCategory(category)
+          const categoryOptions = keepCurrent(categoriesForGender(gender), draft.category, CATEGORIES)
+          const subtypeOptions = keepCurrent(subtypesForGender(category, gender), draft.subType, SUBTYPES)
           const subtypeValue = (subtypeOptions as readonly string[]).includes(draft.subType) ? draft.subType : 'altro'
           const problems = fieldErrors[draft.key]
           return (
@@ -271,7 +286,7 @@ export function BulkGarmentReview({ files, skipped, onCancel, onSave }: BulkGarm
                 <Field
                   label={`Categoria, foto ${photoNumber}`}
                   value={draft.category}
-                  options={CATEGORIES}
+                  options={categoryOptions}
                   labels={CATEGORY_LABELS}
                   onChange={(value) => {
                     const nextType = (CATEGORIES as readonly string[]).includes(value)

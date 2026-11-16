@@ -2,13 +2,15 @@
  * Il salvataggio locale avvisa chi vuole copiare il cambiamento sull’account.
  * Senza un ascoltatore non fa nulla: l’app resta utilizzabile solo sul dispositivo.
  */
-import type { Garment, Outfit } from '../domain/types.ts'
+import type { Garment, Outfit, Profile } from '../domain/types.ts'
 
 export type LocalChange =
   | { kind: 'garment-put'; garment: Garment }
-  | { kind: 'garment-delete'; id: string }
+  | { kind: 'garment-delete'; id: string; profileId?: string }
   | { kind: 'outfit-put'; outfit: Outfit }
-  | { kind: 'outfit-delete'; id: string }
+  | { kind: 'outfit-delete'; id: string; profileId?: string }
+  | { kind: 'profile-put'; profile: Profile }
+  | { kind: 'profile-delete'; id: string }
 
 type Listener = (change: LocalChange) => Promise<void> | void
 

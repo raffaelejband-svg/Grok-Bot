@@ -101,3 +101,27 @@ export function planSync(input: {
     deleteLocalOutfitIds: outfits.deleteLocal,
   }
 }
+
+export function planProfileSync(input: {
+  local: readonly Stamp[]
+  cloud: readonly Stamp[]
+  decision: Decision | null
+  privateIds: readonly string[]
+  sharedIds: readonly string[]
+}): { downloadIds: string[]; uploadIds: string[]; deleteLocalIds: string[] } {
+  const planned = planCollection({
+    local: input.local,
+    cloud: input.cloud,
+    decision: input.decision,
+    privateIds: input.privateIds,
+    sharedIds: input.sharedIds,
+    skippedIds: [],
+  })
+  const incoming = planned.download.filter((id) => !input.local.some((item) => item.id === id))
+  const survivors = input.local.filter((item) => !planned.deleteLocal.includes(item.id)).length + incoming.length
+  return {
+    downloadIds: planned.download,
+    uploadIds: planned.upload,
+    deleteLocalIds: survivors < 1 ? [] : planned.deleteLocal,
+  }
+}

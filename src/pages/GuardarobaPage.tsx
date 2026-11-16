@@ -4,7 +4,8 @@ import { GarmentFilters } from '../components/GarmentFilters.tsx'
 import { GarmentForm } from '../components/GarmentForm.tsx'
 import { PhotoView } from '../components/PhotoView.tsx'
 import { EMPTY_GARMENT_FILTER, filterGarments, type GarmentFilter } from '../domain/garments.ts'
-import { CATEGORY_LABELS, COLOUR_LABELS, SEASON_LABELS, type Garment } from '../domain/types.ts'
+import { CATEGORY_LABELS, COLOUR_LABELS, SEASON_LABELS, categoriesForGender, type Category, type Garment, type Gender } from '../domain/types.ts'
+import { useProfiles } from '../profiles/context.tsx'
 import { useCloud } from '../cloud/context.ts'
 import { addGarment, deleteGarment, listGarments, updateGarment } from '../storage/db.ts'
 
@@ -14,6 +15,14 @@ type LoadState =
   | { status: 'loading' }
   | { status: 'error' }
   | { status: 'ready'; garments: Garment[] }
+
+function filterCategories(gender: Gender, garments: readonly Garment[]): Category[] {
+  const base = categoriesForGender(gender)
+  const extra = garments
+    .map((garment) => garment.category)
+    .filter((category) => !(base as readonly string[]).includes(category))
+  return [...base, ...new Set(extra)]
+}
 
 function garmentLabel(garment: Garment): string {
   return `${CATEGORY_LABELS[garment.category]}, ${COLOUR_LABELS[garment.colour]}, ${SEASON_LABELS[garment.season]}`
@@ -28,6 +37,7 @@ export function GuardarobaPage() {
   const [filter, setFilter] = useState<GarmentFilter>(EMPTY_GARMENT_FILTER)
   const [mode, setMode] = useState<Mode>({ type: 'browse' })
   const { revision, starting, linked } = useCloud()
+  const { active } = useProfiles()
 
   const modeKey = mode.type === 'edit' ? `edit:${mode.garment.id}` : mode.type
 
@@ -47,7 +57,7 @@ export function GuardarobaPage() {
     return () => {
       cancelled = true
     }
-  }, [reloadKey, revision, starting])
+  }, [active.id, reloadKey, revision, starting])
 
   useEffect(() => {
     const first = seenMode.current === null
@@ -164,7 +174,13 @@ export function GuardarobaPage() {
           ) : (
             <>
               <div className="mt-6">
-                <GarmentFilters filter={filter} total={garments.length} visible={visible.length} onChange={setFilter} />
+                <GarmentFilters
+                  filter={filter}
+                  total={garments.length}
+                  visible={visible.length}
+                  categories={filterCategories(active.gender, garments)}
+                  onChange={setFilter}
+                />
               </div>
               {visible.length > 0 ? (
                 <ul aria-label="Capi nel guardaroba" className="mt-6 grid grid-cols-2 gap-3">

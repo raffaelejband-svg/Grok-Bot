@@ -6,6 +6,7 @@ import { MissingPieceCard, PieceCard } from '../components/PieceCard.tsx'
 import { PhotoView } from '../components/PhotoView.tsx'
 import { OCCASION_LABELS, SEASON_LABELS, type Garment, type Outfit } from '../domain/types.ts'
 import { useCloud } from '../cloud/context.ts'
+import { useProfiles } from '../profiles/context.tsx'
 import { deleteOutfit, listGarments, listOutfits } from '../storage/db.ts'
 
 type Archive = {
@@ -17,6 +18,7 @@ export function PreferitiPage() {
   const [archive, setArchive] = useState<Archive | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const { revision, starting } = useCloud()
+  const { active: profile } = useProfiles()
 
   useEffect(() => {
     if (starting) return
@@ -32,7 +34,7 @@ export function PreferitiPage() {
     return () => {
       active = false
     }
-  }, [revision, starting])
+  }, [profile.id, revision, starting])
 
   const selected = archive?.outfits.find((outfit) => outfit.id === selectedId)
 
