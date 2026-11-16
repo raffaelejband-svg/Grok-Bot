@@ -20,6 +20,7 @@ import {
   type Season,
 } from '../domain/types.ts'
 import { useCloud } from '../cloud/context.ts'
+import { useProfiles } from '../profiles/context.tsx'
 import { listGarments, saveOutfit } from '../storage/db.ts'
 
 const REQUEST_SEASONS = ['primavera', 'estate', 'autunno', 'inverno'] as const
@@ -51,6 +52,14 @@ export function OutfitPage() {
   const [saving, setSaving] = useState(false)
   const seedCounter = useRef(0)
   const { revision, starting } = useCloud()
+  const { active } = useProfiles()
+  const [seenProfile, setSeenProfile] = useState(active.id)
+  if (seenProfile !== active.id) {
+    setSeenProfile(active.id)
+    setResult(null)
+    setNotice(null)
+    setSaved(false)
+  }
 
   useEffect(() => {
     if (starting) return
@@ -65,7 +74,7 @@ export function OutfitPage() {
     return () => {
       active = false
     }
-  }, [revision, starting])
+  }, [active.id, revision, starting])
 
   function clearLook() {
     setResult(null)
@@ -87,7 +96,7 @@ export function OutfitPage() {
 
   function onGenerate() {
     if (!garments) return
-    setResult(generateOutfit(garments, occasion, season, nextSeed(seedCounter)))
+    setResult(generateOutfit(garments, occasion, season, nextSeed(seedCounter), active.gender))
     setNotice(null)
     setSaved(false)
   }
@@ -126,7 +135,7 @@ export function OutfitPage() {
     }
   }
 
-  const gap = garments ? requiredGarmentsReason(garments) : null
+  const gap = garments ? requiredGarmentsReason(garments, active.gender) : null
 
   return (
     <section className="flex flex-1 flex-col" aria-busy={garments === null}>

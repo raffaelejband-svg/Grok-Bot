@@ -9,14 +9,15 @@ L’indirizzo pubblico, in https, è [https://raffaelejband-svg.github.io/Grok-B
 - Nel **Guardaroba** aggiungi i tuoi capi, ognuno con una foto.
 - In **Outfit** scegli occasione e stagione: l’app compone un look solo con i vestiti che hai.
 - Nei **Preferiti** ritrovi gli outfit che hai salvato.
+- In **Profili** puoi aggiungere un’altra persona. Ogni profilo ha i suoi capi, le sue foto e i suoi outfit. Il profilo può essere uomo o donna.
 
-Per un outfit servono almeno un top, un paio di pantaloni e un paio di scarpe. Se hai anche giacche o accessori, possono entrare nel look. L’app evita colori che stonano e disegni che litigano, per esempio righe con quadri. Se può, non mette scarpe sport con una giacca elegante. Preferisce un tessuto adatto alla stagione: la lana esce dall’estate se hai un’alternativa, il denim in mezza stagione va bene.
+Per un uomo servono almeno un top, un paio di pantaloni e un paio di scarpe. Per una donna va bene anche un vestito con le scarpe, oppure un top con una gonna e le scarpe. Giacche e borsa, se ci sono, possono entrare nel look. L’app evita colori che stonano e disegni che litigano, per esempio righe con quadri. Se può, non mette scarpe sport con una giacca elegante. Preferisce un tessuto adatto alla stagione: la lana esce dall’estate se hai un’alternativa, il denim in mezza stagione va bene.
 
 ## Dove restano i dati
 
-Senza account, capi e outfit restano nel browser di questo dispositivo, in un archivio locale chiamato IndexedDB. L’app si usa lo stesso.
+Senza account, capi, profili e outfit restano nel browser di questo dispositivo, in un archivio locale chiamato IndexedDB. L’app si usa lo stesso. I vestiti che c’erano già diventano il primo profilo, «Il mio profilo».
 
-Con un account, gli stessi capi, le foto e i preferiti si ritrovano su telefono e computer. Stanno nel progetto Firebase che crei tu. La chiave Gemini, se la salvi in **Impostazioni**, resta solo su quel dispositivo: non viene copiata sull’account.
+Con un account, i profili e, per ciascuno, i capi, le foto e i preferiti si ritrovano su telefono e computer. Stanno nel progetto Firebase che crei tu. La chiave Gemini, se la salvi in **Impostazioni**, resta solo su quel dispositivo: non viene copiata sull’account.
 
 Senza una chiave, la foto non viene inviata a Gemini. Se in **Impostazioni** incolli una chiave di Google Gemini, la foto di un capo nuovo viene mandata a Google solo per leggerla. La chiave resta in questo browser, non nel codice e non su GitHub.
 

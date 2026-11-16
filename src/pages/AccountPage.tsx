@@ -51,9 +51,9 @@ export function AccountPage() {
         <>
           <h2 className="mt-6 text-2xl leading-snug font-medium">Sincronizzazione da attivare</h2>
           <p className="mt-3 text-lg leading-snug">
-            Per avere lo stesso guardaroba su telefono e computer serve un collegamento a Firebase, il servizio
-            gratuito di Google. Finché non è attivo, i vestiti restano su questo dispositivo e l’app si usa come
-            sempre.
+            Per avere gli stessi profili, capi e preferiti su telefono e computer serve un collegamento a Firebase,
+            il servizio gratuito di Google. Finché non è attivo, i vestiti restano su questo dispositivo e l’app si
+            usa come sempre.
           </p>
           <p className="mt-3 text-lg leading-snug">
             La chiave Gemini, se l’hai salvata in Impostazioni, resta solo su questo dispositivo.

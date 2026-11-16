@@ -1,9 +1,18 @@
 rules_version = '2';
 // Regole di Cloud Storage per Armadio Outfit.
-// Le foto stanno in users/{uid}/photos/{id}.
+// Le foto di un profilo stanno in users/{uid}/profiles/{profileId}/photos/{id}.
+// Il percorso users/{uid}/photos/{id} resta per le foto già caricate.
 // Un utente entrato legge e scrive solo le proprie foto, e solo file immagine fino a 32 MB.
 service firebase.storage {
   match /b/{bucket}/o {
+    match /users/{userId}/profiles/{profileId}/photos/{photoId} {
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 32 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
     match /users/{userId}/photos/{photoId} {
       allow read, delete: if request.auth != null && request.auth.uid == userId;
       allow create, update: if request.auth != null

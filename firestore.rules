@@ -28,6 +28,26 @@ service cloud.firestore {
       ]);
     }
 
+    match /users/{userId}/profiles/{profileId} {
+      allow read, delete: if signedInAs(userId);
+      allow create, update: if signedInAs(userId)
+        && noSecretFields()
+        && request.resource.data.gender in ['uomo', 'donna']
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() < 80;
+
+      match /garments/{garmentId} {
+        allow read, delete: if signedInAs(userId);
+        allow create, update: if signedInAs(userId) && noSecretFields();
+      }
+
+      match /outfits/{outfitId} {
+        allow read, delete: if signedInAs(userId);
+        allow create, update: if signedInAs(userId) && noSecretFields();
+      }
+    }
+
     match /users/{userId}/garments/{garmentId} {
       allow read, delete: if signedInAs(userId);
       allow create, update: if signedInAs(userId) && noSecretFields();

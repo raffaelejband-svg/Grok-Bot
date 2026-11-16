@@ -3,15 +3,53 @@
  * Capi e outfit restano nel browser: questi tipi descrivono ciò che salviamo in IndexedDB.
  */
 
-export const CATEGORIES = ['top', 'pantaloni', 'scarpe', 'giacca', 'accessori'] as const
+export const CATEGORIES = ['top', 'pantaloni', 'gonna', 'vestito', 'scarpe', 'giacca', 'accessori'] as const
 export type Category = (typeof CATEGORIES)[number]
 
 export const CATEGORY_LABELS: Record<Category, string> = {
   top: 'Top',
   pantaloni: 'Pantaloni',
+  gonna: 'Gonna',
+  vestito: 'Vestito',
   scarpe: 'Scarpe',
   giacca: 'Giacca',
   accessori: 'Accessori',
+}
+
+/** Uomo tiene le categorie di prima. Donna aggiunge gonna e vestito. */
+export const GENDERS = ['uomo', 'donna'] as const
+export type Gender = (typeof GENDERS)[number]
+
+export const GENDER_LABELS: Record<Gender, string> = {
+  uomo: 'Uomo',
+  donna: 'Donna',
+}
+
+export const MENS_CATEGORIES = ['top', 'pantaloni', 'scarpe', 'giacca', 'accessori'] as const satisfies readonly Category[]
+export const WOMENS_CATEGORIES = [
+  'top',
+  'pantaloni',
+  'gonna',
+  'vestito',
+  'scarpe',
+  'giacca',
+  'accessori',
+] as const satisfies readonly Category[]
+
+export function categoriesForGender(gender: Gender): readonly Category[] {
+  return gender === 'donna' ? WOMENS_CATEGORIES : MENS_CATEGORIES
+}
+
+/** Id stabile del profilo che riceve i capi già salvati prima dei profili. */
+export const DEFAULT_PROFILE_ID = 'il-mio-profilo'
+export const DEFAULT_PROFILE_NAME = 'Il mio profilo'
+
+export type Profile = {
+  id: string
+  name: string
+  gender: Gender
+  createdAt: string
+  updatedAt?: string
 }
 
 /** Elenco fisso di colori, in italiano. */
@@ -81,6 +119,9 @@ export const OCCASION_LABELS: Record<Occasion, string> = {
  * Pantaloni: jeans, chino, pantaloni eleganti, shorts.
  * Giacca: blazer, cappotto, giubbotto, cardigan.
  * Scarpe: sneakers, stivali, mocassini, sandali, scarpe eleganti.
+ * Gonna: minigonna, gonna, gonna lunga.
+ * Vestito: abito, vestito.
+ * Scarpe: sneakers, stivali, mocassini, sandali, scarpe eleganti, tacchi.
  * Accessori: borsa, cintura, cappello, sciarpa.
  */
 export const SUBTYPES = [
@@ -93,6 +134,11 @@ export const SUBTYPES = [
   'chino',
   'pantaloni eleganti',
   'shorts',
+  'minigonna',
+  'gonna',
+  'gonna lunga',
+  'abito',
+  'vestito',
   'blazer',
   'cappotto',
   'giubbotto',
@@ -102,6 +148,7 @@ export const SUBTYPES = [
   'mocassini',
   'sandali',
   'scarpe eleganti',
+  'tacchi',
   'borsa',
   'cintura',
   'cappello',
@@ -120,6 +167,11 @@ export const SUBTYPE_LABELS: Record<SubType, string> = {
   chino: 'Chino',
   'pantaloni eleganti': 'Pantaloni eleganti',
   shorts: 'Shorts',
+  minigonna: 'Minigonna',
+  gonna: 'Gonna',
+  'gonna lunga': 'Gonna lunga',
+  abito: 'Abito',
+  vestito: 'Vestito',
   blazer: 'Blazer',
   cappotto: 'Cappotto',
   giubbotto: 'Giubbotto',
@@ -129,6 +181,7 @@ export const SUBTYPE_LABELS: Record<SubType, string> = {
   mocassini: 'Mocassini',
   sandali: 'Sandali',
   'scarpe eleganti': 'Scarpe eleganti',
+  tacchi: 'Tacchi',
   borsa: 'Borsa',
   cintura: 'Cintura',
   cappello: 'Cappello',
@@ -139,14 +192,23 @@ export const SUBTYPE_LABELS: Record<SubType, string> = {
 export const SUBTYPES_BY_CATEGORY: Record<Category, readonly SubType[]> = {
   top: ['camicia', 'maglione', 't-shirt', 'felpa', 'polo', 'altro'],
   pantaloni: ['jeans', 'chino', 'pantaloni eleganti', 'shorts', 'altro'],
+  gonna: ['minigonna', 'gonna', 'gonna lunga', 'altro'],
+  vestito: ['abito', 'vestito', 'altro'],
   giacca: ['blazer', 'cappotto', 'giubbotto', 'cardigan', 'altro'],
-  scarpe: ['sneakers', 'stivali', 'mocassini', 'sandali', 'scarpe eleganti', 'altro'],
+  scarpe: ['sneakers', 'stivali', 'mocassini', 'sandali', 'scarpe eleganti', 'tacchi', 'altro'],
   accessori: ['borsa', 'cintura', 'cappello', 'sciarpa', 'altro'],
 }
 
 export function subtypesForCategory(category: Category | ''): readonly SubType[] {
   if (category === '') return ['altro']
   return SUBTYPES_BY_CATEGORY[category]
+}
+
+/** Nel profilo uomo i tacchi non compaiono. Un capo già salvato resta valido. */
+export function subtypesForGender(category: Category | '', gender: Gender): readonly SubType[] {
+  const subtypes = subtypesForCategory(category)
+  if (gender === 'donna' || category !== 'scarpe') return subtypes
+  return subtypes.filter((subtype) => subtype !== 'tacchi')
 }
 
 export function subtypeFits(category: Category, subType: SubType): boolean {
@@ -202,6 +264,8 @@ export type Garment = {
   createdAt: string
   /** Ultima modifica, per allineare i dispositivi. Se manca, vale createdAt. */
   updatedAt?: string
+  /** Profilo a cui appartiene. Se manca, è il profilo iniziale. */
+  profileId?: string
 }
 
 export type Outfit = {
@@ -210,6 +274,8 @@ export type Outfit = {
   garmentIds: string[]
   occasion: Occasion
   season: Season
+  /** Profilo a cui appartiene. Se manca, è il profilo iniziale. */
+  profileId?: string
   /** Data di creazione in formato ISO 8601, per esempio 2026-11-13T13:00:00.000Z. */
   createdAt: string
   /** Ultima modifica, per allineare i dispositivi. Se manca, vale createdAt. */

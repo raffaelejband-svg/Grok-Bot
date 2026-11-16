@@ -4,16 +4,22 @@ import 'fake-indexeddb/auto'
 import { deleteDB, openDB } from 'idb'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Garment, Outfit } from '../domain/types.ts'
+import { DEFAULT_PROFILE_ID } from '../domain/types.ts'
 import {
   DATABASE_NAME,
   addGarment,
+  addProfile,
   closeDatabase,
   deleteGarment,
   deleteOutfit,
+  deleteProfile,
+  getActiveProfile,
   getGarment,
   listGarments,
   listOutfits,
+  listProfiles,
   saveOutfit,
+  setActiveProfile,
   updateGarment,
 } from './db.ts'
 
@@ -79,9 +85,12 @@ describe('archivio capi e outfit', () => {
   })
 
   it('un capo vecchio, senza i campi nuovi, si legge con i valori di ripiego', async () => {
-    await listGarments()
-    await closeDatabase()
-    const database = await openDB(DATABASE_NAME, 1)
+    const database = await openDB(DATABASE_NAME, 1, {
+      upgrade(db) {
+        db.createObjectStore('garments', { keyPath: 'id' })
+        db.createObjectStore('outfits', { keyPath: 'id' })
+      },
+    })
     await database.put('garments', {
       id: 'vecchio',
       photo: new Blob(['vecchia'], { type: 'image/jpeg' }),
@@ -91,6 +100,14 @@ describe('archivio capi e outfit', () => {
       occasion: 'casual',
       createdAt: '2026-01-01T00:00:00.000Z',
     })
+    await database.put('outfits', {
+      id: 'look-vecchio',
+      name: 'Lunedì',
+      garmentIds: ['vecchio'],
+      occasion: 'lavoro',
+      season: 'autunno',
+      createdAt: '2026-02-01T00:00:00.000Z',
+    })
     database.close()
 
     const loaded = await getGarment('vecchio')
@@ -99,6 +116,33 @@ describe('archivio capi e outfit', () => {
     expect(loaded?.pattern).toBe('tinta unita')
     expect(loaded?.material).toBe('sconosciuto')
     expect(loaded?.category).toBe('top')
+    expect(loaded?.profileId).toBe(DEFAULT_PROFILE_ID)
+    const profiles = await listProfiles()
+    expect(profiles.map((profile) => profile.name)).toEqual(['Il mio profilo'])
+    expect(profiles[0]?.gender).toBe('uomo')
+    expect((await listGarments()).map((item) => item.id)).toEqual(['vecchio'])
+    expect((await listOutfits()).map((item) => item.id)).toEqual(['look-vecchio'])
+  })
+
+  it('tiene i capi di ogni profilo separati e non elimina l’ultimo', async () => {
+    await addGarment(garment())
+    await saveOutfit(outfit())
+    const maria = await addProfile({ name: 'Maria', gender: 'donna' })
+    await setActiveProfile(maria.id)
+    expect(await listGarments()).toEqual([])
+    expect(await listOutfits()).toEqual([])
+    await addGarment(garment({ id: 'gonna', category: 'gonna', subType: 'gonna' }))
+    expect((await getActiveProfile()).name).toBe('Maria')
+    expect((await listGarments()).map((item) => item.id)).toEqual(['gonna'])
+
+    await setActiveProfile(DEFAULT_PROFILE_ID)
+    expect((await listGarments()).map((item) => item.id)).toEqual(['capo-1'])
+    expect((await listOutfits()).map((item) => item.id)).toEqual(['look-1'])
+
+    await deleteProfile(maria.id)
+    expect((await listProfiles()).map((profile) => profile.id)).toEqual([DEFAULT_PROFILE_ID])
+    await expect(deleteProfile(DEFAULT_PROFILE_ID)).rejects.toThrow('Serve almeno un profilo.')
+    expect((await listGarments()).map((item) => item.id)).toEqual(['capo-1'])
   })
 
   it('un capo nuovo senza i campi extra li riceve al salvataggio', async () => {

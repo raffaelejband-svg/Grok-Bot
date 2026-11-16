@@ -11,9 +11,12 @@ import {
   PATTERNS,
   SEASONS,
   SUBTYPES,
+  categoriesForGender,
   subtypeFits,
+  subtypesForGender,
   type Category,
   type Colour,
+  type Gender,
   type Material,
   type Occasion,
   type Pattern,
@@ -27,12 +30,14 @@ export const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta
 
 const NO_SECONDARY = 'nessuno'
 
-export function geminiPrompt(): string {
+export function geminiPrompt(gender: Gender = 'uomo'): string {
+  const categories = categoriesForGender(gender)
+  const subtypes = [...new Set(categories.flatMap((category) => subtypesForGender(category, gender)))]
   return [
     'Look at the photo. It should show one clothing item.',
     'Reply with JSON only. Use exactly the allowed values. Do not add words.',
-    `category: ${CATEGORIES.join(', ')}`,
-    `subType: ${SUBTYPES.join(', ')}. Use altro if you are not sure. The subType must fit the category.`,
+    `category: ${categories.join(', ')}`,
+    `subType: ${subtypes.join(', ')}. Use altro if you are not sure. The subType must fit the category.`,
     `colour: ${COLOURS.join(', ')}`,
     `colourSecondary: ${COLOURS.join(', ')}, or ${NO_SECONDARY} if there is no clear second colour.`,
     `pattern: ${PATTERNS.join(', ')}`,
@@ -46,12 +51,14 @@ function enumSchema(values: readonly string[]) {
   return { type: 'string', enum: [...values] }
 }
 
-export function geminiRequestBody(mimeType: string, data: string): Record<string, unknown> {
+export function geminiRequestBody(mimeType: string, data: string, gender: Gender = 'uomo'): Record<string, unknown> {
+  const categories = categoriesForGender(gender)
+  const subtypes = [...new Set(categories.flatMap((category) => subtypesForGender(category, gender)))]
   return {
     contents: [
       {
         parts: [
-          { text: geminiPrompt() },
+          { text: geminiPrompt(gender) },
           { inlineData: { mimeType: mimeType || 'image/jpeg', data } },
         ],
       },
@@ -65,8 +72,8 @@ export function geminiRequestBody(mimeType: string, data: string): Record<string
       responseSchema: {
         type: 'object',
         properties: {
-          category: enumSchema(CATEGORIES),
-          subType: enumSchema(SUBTYPES),
+          category: enumSchema(categories),
+          subType: enumSchema(subtypes),
           colour: enumSchema(COLOURS),
           colourSecondary: enumSchema([NO_SECONDARY, ...COLOURS]),
           pattern: enumSchema(PATTERNS),
@@ -172,9 +179,9 @@ async function payloadBlob(blob: Blob): Promise<Blob> {
   }
 }
 
-export async function recognizeWithGemini(blob: Blob, apiKey: string): Promise<GarmentGuess> {
+export async function recognizeWithGemini(blob: Blob, apiKey: string, gender: Gender = 'uomo'): Promise<GarmentGuess> {
   const image = await payloadBlob(blob)
-  const body = geminiRequestBody(image.type || blob.type || 'image/jpeg', await toBase64(image))
+  const body = geminiRequestBody(image.type || blob.type || 'image/jpeg', await toBase64(image), gender)
   let response: Response
   try {
     response = await fetch(GEMINI_ENDPOINT, {

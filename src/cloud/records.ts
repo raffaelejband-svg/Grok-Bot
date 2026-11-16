@@ -2,10 +2,12 @@
  * Dati del capo senza la foto: la foto sta in Cloud Storage.
  * I campi sono quelli del capo, niente chiave e niente blob.
  */
-import { normalizeGarment } from '../storage/db.ts'
+import { normalizeGarment, normalizeProfile } from '../storage/db.ts'
 import {
   CATEGORIES,
   COLOURS,
+  DEFAULT_PROFILE_ID,
+  GENDERS,
   MATERIALS,
   OCCASIONS,
   PATTERNS,
@@ -15,16 +17,19 @@ import {
   type Category,
   type Colour,
   type Garment,
+  type Gender,
   type Material,
   type Occasion,
   type Outfit,
   type Pattern,
+  type Profile,
   type Season,
   type SubType,
 } from '../domain/types.ts'
 
 export type CloudGarmentRecord = {
   id: string
+  profileId: string
   category: Category
   subType: SubType
   colour: Colour
@@ -50,6 +55,7 @@ export function toCloudRecord(garment: Garment): CloudGarmentRecord {
   const contentType = normal.photo.type.startsWith('image/') ? normal.photo.type : 'image/jpeg'
   return {
     id: normal.id,
+    profileId: normal.profileId ?? DEFAULT_PROFILE_ID,
     category: normal.category,
     subType: normal.subType ?? 'altro',
     colour: normal.colour,
@@ -67,6 +73,7 @@ export function toCloudRecord(garment: Garment): CloudGarmentRecord {
 export function garmentFromCloud(record: CloudGarmentRecord, photo: Blob): Garment {
   return normalizeGarment({
     id: record.id,
+    profileId: record.profileId,
     photo,
     category: record.category,
     subType: record.subType,
@@ -104,8 +111,12 @@ export function parseCloudGarment(value: unknown): CloudGarmentRecord | null {
   if (!id || !category || !colour || !season || !occasion || !createdAt) return null
   const guessedType = asEnum<SubType>(value.subType, SUBTYPES) ?? 'altro'
   const colourSecondary = value.colourSecondary == null ? null : asEnum<Colour>(value.colourSecondary, COLOURS)
+  const profileId = typeof value.profileId === 'string' && value.profileId.trim() !== ''
+    ? value.profileId.trim()
+    : DEFAULT_PROFILE_ID
   return {
     id,
+    profileId,
     category,
     subType: subtypeFits(category, guessedType) ? guessedType : 'altro',
     colour,
@@ -133,6 +144,9 @@ export function parseCloudOutfit(value: unknown): Outfit | null {
     ? value.garmentIds.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
     : []
   if (!id || !name || !occasion || !season || !createdAt || garmentIds.length === 0) return null
+  const profileId = typeof value.profileId === 'string' && value.profileId.trim() !== ''
+    ? value.profileId.trim()
+    : DEFAULT_PROFILE_ID
   return {
     id,
     name,
@@ -141,5 +155,22 @@ export function parseCloudOutfit(value: unknown): Outfit | null {
     season,
     createdAt,
     updatedAt: asDate(value.updatedAt) ?? createdAt,
+    profileId,
   }
+}
+
+export function parseCloudProfile(value: unknown): Profile | null {
+  if (!isRecord(value)) return null
+  const id = typeof value.id === 'string' ? value.id.trim() : ''
+  const name = typeof value.name === 'string' ? value.name.trim() : ''
+  const gender = asEnum<Gender>(value.gender, GENDERS)
+  const createdAt = asDate(value.createdAt)
+  if (!id || !name || !gender || !createdAt) return null
+  return normalizeProfile({
+    id,
+    name,
+    gender,
+    createdAt,
+    updatedAt: asDate(value.updatedAt) ?? createdAt,
+  })
 }

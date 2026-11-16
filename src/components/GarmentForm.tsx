@@ -15,13 +15,16 @@ import {
   SEASON_LABELS,
   SEASONS,
   SUBTYPE_LABELS,
+  SUBTYPES,
+  categoriesForGender,
   subtypeFits,
-  subtypesForCategory,
+  subtypesForGender,
   type Category,
   type Material,
   type Pattern,
   type SubType,
 } from '../domain/types.ts'
+import { useProfiles } from '../profiles/context.tsx'
 import type { Garment } from '../domain/types.ts'
 import { useCloud } from '../cloud/context.ts'
 import type { GarmentGuess } from '../vision/guess.ts'
@@ -42,6 +45,13 @@ type GarmentFormProps = {
 type GuessState = 'idle' | 'pending' | 'ready' | 'failed'
 
 const IMAGE_EXTENSION = /\.(avif|gif|heic|heif|jpe?g|png|webp)$/i
+
+function keepCurrent<T extends string>(options: readonly T[], current: string, known: readonly string[]): readonly T[] {
+  if (current !== '' && known.includes(current) && !(options as readonly string[]).includes(current)) {
+    return [...options, current as T]
+  }
+  return options
+}
 
 function isLikelyImage(file: File): boolean {
   return file.type.startsWith('image/') || IMAGE_EXTENSION.test(file.name)
@@ -170,6 +180,8 @@ export function GarmentForm({
   const [savedCount, setSavedCount] = useState(0)
   const [bulk, setBulk] = useState<{ files: File[]; skipped: number } | null>(null)
   const { linked } = useCloud()
+  const { active } = useProfiles()
+  const gender = active.gender
 
   const preview = photo ?? garment?.photo ?? null
   const previewAlt = photo ? 'Anteprima della foto' : 'Foto attuale'
@@ -205,9 +217,12 @@ export function GarmentForm({
 
   function applyGuess(result: GarmentGuess): boolean {
     let applied = false
-    const nextCategory = result.category && !categoryTouched.current ? result.category : category
-    if (result.category && !categoryTouched.current) {
-      setCategory(result.category)
+    const allowedGuess = result.category && (categoriesForGender(gender) as readonly string[]).includes(result.category)
+      ? result.category
+      : null
+    const nextCategory = allowedGuess && !categoryTouched.current ? allowedGuess : category
+    if (allowedGuess && !categoryTouched.current) {
+      setCategory(allowedGuess)
       applied = true
     }
     if (result.subType && !subTypeTouched.current) {
@@ -266,7 +281,7 @@ export function GarmentForm({
       setOccasion('casual')
     }
     setGuess('pending')
-    void recognizeGarment(file).then(
+    void recognizeGarment(file, gender).then(
       (result) => {
         if (request !== requestId.current) return
         setGuessNote(result.note ?? null)
@@ -368,7 +383,8 @@ export function GarmentForm({
   }
 
   const knownCategory = (CATEGORIES as readonly string[]).includes(category) ? (category as Category) : ''
-  const subtypeOptions = subtypesForCategory(knownCategory)
+  const categoryOptions = keepCurrent(categoriesForGender(gender), category, CATEGORIES)
+  const subtypeOptions = keepCurrent(subtypesForGender(knownCategory, gender), subType, SUBTYPES)
   const subtypeValue = (subtypeOptions as readonly string[]).includes(subType) ? subType : 'altro'
 
   function chooseFromGallery(list: FileList | null) {
@@ -478,7 +494,7 @@ export function GarmentForm({
           label="Categoria"
           value={category}
           error={errors.category}
-          options={CATEGORIES}
+          options={categoryOptions}
           labels={CATEGORY_LABELS}
           onChange={(value) => {
             categoryTouched.current = true
