@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { COLOURS } from './types.ts'
-import { dominantColour, nearestColour } from './dominantColour.ts'
+import { coloursAreDistinct, dominantColour, nearestColour, readGarmentColours } from './dominantColour.ts'
 
 const ANCHORS: Record<(typeof COLOURS)[number], [number, number, number]> = {
   nero: [0x1c, 0x19, 0x17],
@@ -74,6 +74,38 @@ describe('colore dominante', () => {
     const [r, g, b] = ANCHORS.rosso
     const data = image(20, 20, (x) => (x < 2 ? [0, 0, 0, 0] : [r, g, b, 255]))
     expect(dominantColour(data, 20, 20)).toBe('rosso')
+  })
+
+  it('vede un secondo colore solo se è davvero un’altra tinta', () => {
+    const [bluR, bluG, bluB] = ANCHORS.blu
+    const [rossoR, rossoG, rossoB] = ANCHORS.rosso
+    const [beigeR, beigeG, beigeB] = ANCHORS.beige
+    const split = image(40, 40, (x, y) => {
+      const inCentre = x >= 10 && x < 30 && y >= 10 && y < 30
+      if (!inCentre) return [beigeR, beigeG, beigeB, 255]
+      return x < 20 ? [bluR, bluG, bluB, 255] : [rossoR, rossoG, rossoB, 255]
+    })
+    expect(readGarmentColours(split, 40, 40)).toEqual({ colour: 'blu', secondary: 'rosso' })
+
+    const [azzurroR, azzurroG, azzurroB] = ANCHORS.azzurro
+    const shade = image(40, 40, (x, y) => {
+      const inCentre = x >= 10 && x < 30 && y >= 10 && y < 30
+      if (!inCentre) return [beigeR, beigeG, beigeB, 255]
+      return x < 26 ? [bluR, bluG, bluB, 255] : [azzurroR, azzurroG, azzurroB, 255]
+    })
+    expect(readGarmentColours(shade, 40, 40)).toEqual({ colour: 'blu', secondary: null })
+    expect(coloursAreDistinct('blu', 'azzurro')).toBe(false)
+    expect(coloursAreDistinct('blu', 'rosso')).toBe(true)
+  })
+
+  it('un po’ di rosso sul blu non basta come secondo colore', () => {
+    const [bluR, bluG, bluB] = ANCHORS.blu
+    const [rossoR, rossoG, rossoB] = ANCHORS.rosso
+    const data = image(40, 40, (x, y) => {
+      const fleck = x >= 14 && x < 18 && y >= 14 && y < 18
+      return fleck ? [rossoR, rossoG, rossoB, 255] : [bluR, bluG, bluB, 255]
+    })
+    expect(readGarmentColours(data, 40, 40).secondary).toBeNull()
   })
 
   it('rifiuta un’immagine vuota', () => {

@@ -107,10 +107,51 @@ describe('modulo del capo', () => {
       choices: {
         category: 'top',
         colour: 'blu',
+        colourSecondary: null,
+        subType: 'altro',
+        pattern: 'tinta unita',
+        material: 'sconosciuto',
         season: 'estate',
         occasion: 'casual',
       },
     })
+  })
+
+  it('accetta tipo, secondo colore, disegno e materiale', () => {
+    expect(
+      parseGarmentForm({
+        ...validFields,
+        subType: 'camicia',
+        colourSecondary: 'bianco',
+        pattern: 'righe',
+        material: 'cotone',
+      }),
+    ).toEqual({
+      ok: true,
+      choices: {
+        category: 'top',
+        colour: 'blu',
+        colourSecondary: 'bianco',
+        subType: 'camicia',
+        pattern: 'righe',
+        material: 'cotone',
+        season: 'estate',
+        occasion: 'casual',
+      },
+    })
+  })
+
+  it('un secondo colore uguale al principale non conta', () => {
+    const parsed = parseGarmentForm({ ...validFields, colourSecondary: 'blu' })
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.choices.colourSecondary).toBeNull()
+  })
+
+  it('rifiuta un tipo che non sta nella categoria', () => {
+    expect(validateGarmentForm({ ...validFields, subType: 'sneakers' }).subType).toBe(
+      'Scegli un tipo adatto alla categoria.',
+    )
   })
 
   it('in modifica la foto già salvata basta', () => {

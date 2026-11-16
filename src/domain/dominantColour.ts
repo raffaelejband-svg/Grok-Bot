@@ -128,6 +128,25 @@ function countColours(
   return { counts, kept, seen }
 }
 
+/** Coppie che sono la stessa tinta con più o meno luce, non un secondo colore. */
+const SHADE_FAMILIES: readonly (readonly Colour[])[] = [
+  ['blu', 'azzurro'],
+  ['rosso', 'bordeaux'],
+  ['giallo', 'arancione', 'oro'],
+  ['beige', 'marrone'],
+  ['grigio', 'argento'],
+  ['bianco', 'argento'],
+  ['nero', 'grigio'],
+]
+
+/** Quota minima del secondo colore, sul centro tenuto, perché conti davvero. */
+const SECONDARY_SHARE = 0.2
+
+export function coloursAreDistinct(left: Colour, right: Colour): boolean {
+  if (left === right) return false
+  return !SHADE_FAMILIES.some((family) => family.includes(left) && family.includes(right))
+}
+
 function winner(counts: Map<Colour, number>): Colour | null {
   let best: Colour | null = null
   let bestCount = 0
@@ -140,12 +159,39 @@ function winner(counts: Map<Colour, number>): Colour | null {
   return best
 }
 
-export function dominantColour(data: Uint8ClampedArray, width: number, height: number): Colour | null {
-  if (width < 1 || height < 1 || data.length < width * height * 4) return null
+function secondaryColour(counts: Map<Colour, number>, primary: Colour, kept: number): Colour | null {
+  const primaryCount = counts.get(primary) ?? 0
+  let best: Colour | null = null
+  let bestCount = 0
+  for (const [colour, count] of counts) {
+    if (colour === primary || count <= bestCount) continue
+    if (kept <= 0 || count / kept < SECONDARY_SHARE) continue
+    if (primaryCount > 0 && count / primaryCount < 0.25) continue
+    if (!coloursAreDistinct(primary, colour)) continue
+    best = colour
+    bestCount = count
+  }
+  return best
+}
+
+export function readGarmentColours(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+): { colour: Colour | null; secondary: Colour | null } {
+  if (width < 1 || height < 1 || data.length < width * height * 4) {
+    return { colour: null, secondary: null }
+  }
   const step = sampleStep(width, height)
   const background = borderColour(data, width, height, step)
   const rejected = countColours(data, width, height, step, background, true)
   const usable = rejected.seen > 0 && rejected.kept / rejected.seen >= MIN_KEPT_RATIO
-  if (usable) return winner(rejected.counts)
-  return winner(countColours(data, width, height, step, null, false).counts)
+  const chosen = usable ? rejected : countColours(data, width, height, step, null, false)
+  const colour = winner(chosen.counts)
+  if (!colour) return { colour: null, secondary: null }
+  return { colour, secondary: secondaryColour(chosen.counts, colour, chosen.kept) }
+}
+
+export function dominantColour(data: Uint8ClampedArray, width: number, height: number): Colour | null {
+  return readGarmentColours(data, width, height).colour
 }

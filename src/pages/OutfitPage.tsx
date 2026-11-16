@@ -163,7 +163,8 @@ export function OutfitPage() {
               <h2 className="font-display text-3xl leading-none tracking-tight">Il tuo look</h2>
               <p
                 className={
-                  result.outfit.relaxed === 'none'
+                  result.outfit.relaxed === 'none' &&
+                  result.outfit.reason === 'I capi vanno bene per questa occasione e questa stagione.'
                     ? 'mt-3 text-base leading-relaxed text-muted'
                     : 'mt-3 rounded-2xl bg-clay-soft px-4 py-3 text-base leading-relaxed'
                 }

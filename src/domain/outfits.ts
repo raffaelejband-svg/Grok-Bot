@@ -2,7 +2,7 @@
  * Compone un outfit con i capi che la persona ha già.
  * Stesso seme, stesso risultato. Un seme nuovo può scegliere un’altra combinazione.
  */
-import type { Category, Colour, Garment, Occasion, Season } from './types.ts'
+import type { Category, Colour, Garment, Material, Occasion, Pattern, Season } from './types.ts'
 
 const PIECE_ORDER = ['top', 'pantaloni', 'scarpe', 'giacca', 'accessori'] as const satisfies readonly Category[]
 const REQUIRED_SLOTS = ['top', 'pantaloni', 'scarpe'] as const satisfies readonly Category[]
@@ -97,10 +97,17 @@ export function generateOutfit(
   if (missing) return { ok: false, reason: missing }
 
   const random = mulberry32(seed)
+  const harmonies: readonly Harmony[] = [
+    { pattern: true, formality: true },
+    { pattern: true, formality: false },
+    { pattern: false, formality: false },
+  ]
   for (const level of [0, 1, 2] as const) {
-    const pieces = assemble(garments, occasion, season, level, random)
-    if (!pieces) continue
-    return { ok: true, outfit: finishOutfit(pieces, occasion, season) }
+    for (const harmony of harmonies) {
+      const pieces = assemble(garments, occasion, season, level, random, harmony)
+      if (!pieces) continue
+      return { ok: true, outfit: finishOutfit(pieces, occasion, season) }
+    }
   }
 
   return {
@@ -120,14 +127,19 @@ export function swapPiece(
     return { outfit, swapped: false, reason: 'Non c’è un capo da cambiare in questo posto.' }
   }
 
-  const keptColours = listOutfitPieces(outfit)
+  const kept = listOutfitPieces(outfit)
     .filter((piece) => piece.slot !== slot)
-    .map((piece) => piece.garment.colour)
+    .map((piece) => piece.garment)
   const options = garments.filter((garment) => garment.category === slot && garment.id !== current.id)
   const ordered = shuffledByPreference(options, outfit.occasion, outfit.season, mulberry32(seed))
+  const keptPatternClash = patternsClash(kept)
+  const keptFormalityClash = formalitiesClash(kept)
 
   for (const candidate of ordered) {
-    if (!coloursFit([...keptColours, candidate.colour])) continue
+    const group = [...kept, candidate]
+    if (!coloursFit(group.map((garment) => garment.colour))) continue
+    if (!keptPatternClash && patternsClash(group)) continue
+    if (!keptFormalityClash && formalitiesClash(group)) continue
     return {
       outfit: finishOutfit(replacePiece(outfit, slot, candidate), outfit.occasion, outfit.season),
       swapped: true,
@@ -150,8 +162,15 @@ function finishOutfit(pieces: CorePieces, occasion: Occasion, season: Season): S
     ...(pieces.accessori ? { accessori: pieces.accessori } : {}),
     occasion,
     season,
-    ...describeRelaxation(maxLevel(chosen, occasion, season)),
+    ...describeRelaxation(maxLevel(chosen, occasion, season), chosen),
   }
+}
+
+function groupFits(garments: readonly Garment[], harmony: Harmony): boolean {
+  if (!coloursFit(garments.map((garment) => garment.colour))) return false
+  if (harmony.pattern && patternsClash(garments)) return false
+  if (harmony.formality && formalitiesClash(garments)) return false
+  return true
 }
 
 function assemble(
@@ -160,6 +179,7 @@ function assemble(
   season: Season,
   level: Relaxation,
   random: () => number,
+  harmony: Harmony,
 ): CorePieces | null {
   const tops = garments.filter((garment) => garment.category === 'top' && minimumLevel(garment, occasion, season) <= level)
   const pants = garments.filter(
@@ -177,11 +197,11 @@ function assemble(
   for (const top of orderedTops) {
     for (const pantaloni of orderedPants) {
       for (const scarpe of orderedShoes) {
-        const base = [top.colour, pantaloni.colour, scarpe.colour]
-        if (!coloursFit(base)) continue
-        const giacca = firstThatFits(garments, 'giacca', occasion, season, level, base, random)
-        const withJacket = giacca ? [...base, giacca.colour] : base
-        const accessori = firstThatFits(garments, 'accessori', occasion, season, level, withJacket, random)
+        const core = [top, pantaloni, scarpe]
+        if (!groupFits(core, harmony)) continue
+        const giacca = firstThatFits(garments, 'giacca', occasion, season, level, core, random, harmony)
+        const withJacket = giacca ? [...core, giacca] : core
+        const accessori = firstThatFits(garments, 'accessori', occasion, season, level, withJacket, random, harmony)
         return {
           top,
           pantaloni,
@@ -202,12 +222,13 @@ function firstThatFits(
   occasion: Occasion,
   season: Season,
   level: Relaxation,
-  colours: readonly Colour[],
+  chosen: readonly Garment[],
   random: () => number,
+  harmony: Harmony,
 ): Garment | undefined {
   const pool = garments.filter((garment) => garment.category === slot && minimumLevel(garment, occasion, season) <= level)
   const ordered = shuffledByPreference(pool, occasion, season, random)
-  return ordered.find((garment) => coloursFit([...colours, garment.colour]))
+  return ordered.find((garment) => groupFits([...chosen, garment], harmony))
 }
 
 function shuffledByPreference(
@@ -218,7 +239,19 @@ function shuffledByPreference(
 ): Garment[] {
   const tiers: [Garment[], Garment[], Garment[]] = [[], [], []]
   for (const item of items) tiers[minimumLevel(item, occasion, season)].push(item)
-  return tiers.flatMap((tier) => shuffle(tier, random))
+  return tiers.flatMap((tier) => shuffleByMaterial(tier, season, random))
+}
+
+function shuffleByMaterial(items: readonly Garment[], season: Season, random: () => number): Garment[] {
+  const groups = new Map<number, Garment[]>()
+  for (const item of items) {
+    const rank = materialRank(item.material, season)
+    const group = groups.get(rank) ?? []
+    group.push(item)
+    groups.set(rank, group)
+  }
+  const ranks = [...groups.keys()].sort((left, right) => right - left)
+  return ranks.flatMap((rank) => shuffle(groups.get(rank) ?? [], random))
 }
 
 /** 0 occasione e stagione, 1 solo stagione, 2 anche la stagione è diversa. «tutte» vale per ogni stagione. */
@@ -238,23 +271,84 @@ function maxLevel(garments: readonly Garment[], occasion: Occasion, season: Seas
   return level
 }
 
-function describeRelaxation(level: Relaxation): Pick<SuggestedOutfit, 'relaxed' | 'reason'> {
-  if (level === 0) {
-    return {
-      relaxed: 'none',
-      reason: 'I capi vanno bene per questa occasione e questa stagione.',
+function describeRelaxation(level: Relaxation, pieces: readonly Garment[]): Pick<SuggestedOutfit, 'relaxed' | 'reason'> {
+  const base =
+    level === 0
+      ? 'I capi vanno bene per questa occasione e questa stagione.'
+      : level === 1
+        ? 'Non bastavano i capi per questa occasione: ho usato anche altre occasioni, nella stessa stagione.'
+        : 'Non bastavano i capi di stagione: ho cercato anche nel resto del guardaroba.'
+  const notes = [base]
+  if (formalitiesClash(pieces)) {
+    notes.push('Ho messo insieme sport ed elegante perché non c’era un’alternativa migliore.')
+  }
+  if (patternsClash(pieces)) {
+    notes.push('Ho accostato disegni diversi perché non c’era un’alternativa migliore.')
+  }
+  const relaxed = level === 0 ? 'none' : level === 1 ? 'occasion' : 'season'
+  return { relaxed, reason: notes.join(' ') }
+}
+
+function patternOf(garment: Garment): Pattern {
+  return garment.pattern ?? 'tinta unita'
+}
+
+/** Tinta unita sta con tutto. Righe e quadri non stanno insieme. Due fantasie, o una fantasia con un altro disegno, no. */
+function pairPatternsClash(left: Pattern, right: Pattern): boolean {
+  if (left === 'tinta unita' || right === 'tinta unita') return false
+  if (left === 'fantasia' || right === 'fantasia') return true
+  return left !== right
+}
+
+function patternsClash(garments: readonly Garment[]): boolean {
+  for (let left = 0; left < garments.length; left += 1) {
+    for (let right = left + 1; right < garments.length; right += 1) {
+      const first = garments[left]
+      const second = garments[right]
+      if (first && second && pairPatternsClash(patternOf(first), patternOf(second))) return true
     }
   }
-  if (level === 1) {
-    return {
-      relaxed: 'occasion',
-      reason: 'Non bastavano i capi per questa occasione: ho usato anche altre occasioni, nella stessa stagione.',
-    }
+  return false
+}
+
+/** Sport ed elegante non stanno nello stesso look, se c’è un’alternativa. */
+function formalitiesClash(garments: readonly Garment[]): boolean {
+  let sport = false
+  let elegante = false
+  for (const garment of garments) {
+    if (garment.occasion === 'sport') sport = true
+    if (garment.occasion === 'elegante') elegante = true
   }
-  return {
-    relaxed: 'season',
-    reason: 'Non bastavano i capi di stagione: ho cercato anche nel resto del guardaroba.',
+  return sport && elegante
+}
+
+/**
+ * Più alto è meglio, dentro lo stesso livello di occasione e stagione.
+ * La lana esce dall’estate se c’è un’alternativa. Il denim in mezza stagione va bene.
+ * Un materiale sconosciuto non viene punito come se fosse lana.
+ */
+function materialRank(material: Material | undefined, season: Season): number {
+  const value = material ?? 'sconosciuto'
+  if (season === 'tutte' || value === 'sconosciuto' || value === 'altro') return 1
+  if (season === 'estate') {
+    if (value === 'lana') return 0
+    if (value === 'pelle') return 1
+    if (value === 'denim') return 2
+    return 3
   }
+  if (season === 'inverno') {
+    if (value === 'lana' || value === 'pelle') return 3
+    if (value === 'cotone') return 1
+    return 2
+  }
+  if (value === 'denim' || value === 'cotone') return 3
+  if (value === 'lana' || value === 'pelle' || value === 'sintetico') return 2
+  return 1
+}
+
+type Harmony = {
+  pattern: boolean
+  formality: boolean
 }
 
 function coloursFit(colours: readonly Colour[]): boolean {

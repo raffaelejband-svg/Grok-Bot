@@ -36,5 +36,9 @@ describe('guscio dell’app', () => {
 
     fireEvent.click(screen.getByRole('link', { name: 'Guardaroba' }))
     expect(screen.getByRole('heading', { level: 1, name: 'Guardaroba' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('link', { name: 'Impostazioni' }))
+    expect(screen.getByRole('heading', { level: 1, name: 'Impostazioni' })).toBeInTheDocument()
+    expect(screen.getByText('Nessuna chiave. Le foto restano sul telefono.')).toBeInTheDocument()
   })
 })

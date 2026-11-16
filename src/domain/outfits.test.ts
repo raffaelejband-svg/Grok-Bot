@@ -264,6 +264,209 @@ describe('generateOutfit', () => {
     for (let seed = 2; seed <= 40; seed += 1) seen.add(signature(generateOutfit(wardrobe, 'casual', 'estate', seed)))
     expect(seen.size).toBeGreaterThan(1)
   })
+
+  it('non accosta righe e quadri se c’è una tinta unita', () => {
+    const outfit = expectOutfit(
+      generateOutfit(
+        [
+          garment({ id: 'stripes', category: 'top', colour: 'blu', pattern: 'righe' }),
+          garment({ id: 'plain', category: 'top', colour: 'bianco', pattern: 'tinta unita' }),
+          garment({ id: 'checks', category: 'pantaloni', colour: 'nero', pattern: 'quadri' }),
+          garment({ id: 'shoes', category: 'scarpe', colour: 'nero' }),
+        ],
+        'casual',
+        'estate',
+        1,
+      ),
+    )
+
+    expect(outfit.top.id).toBe('plain')
+    expect(outfit.reason).not.toContain('disegni')
+  })
+
+  it('non mette due fantasie insieme', () => {
+    const outfit = expectOutfit(
+      generateOutfit(
+        [
+          garment({ id: 'floral', category: 'top', colour: 'rosso', pattern: 'fantasia' }),
+          garment({ id: 'plain', category: 'top', colour: 'bianco', pattern: 'tinta unita' }),
+          garment({ id: 'pants', category: 'pantaloni', colour: 'nero', pattern: 'fantasia' }),
+          garment({ id: 'shoes', category: 'scarpe', colour: 'nero' }),
+        ],
+        'casual',
+        'estate',
+        4,
+      ),
+    )
+
+    expect(outfit.top.id).toBe('plain')
+    expect(outfit.reason).not.toContain('disegni')
+  })
+
+  it('la tinta unita sta con le righe, e due righe stanno insieme', () => {
+    const withStripes = expectOutfit(
+      generateOutfit(
+        [
+          garment({ id: 'top', category: 'top', colour: 'bianco', pattern: 'tinta unita' }),
+          garment({ id: 'pants', category: 'pantaloni', colour: 'blu', pattern: 'righe' }),
+          garment({ id: 'shoes', category: 'scarpe', colour: 'nero' }),
+        ],
+        'casual',
+        'estate',
+        1,
+      ),
+    )
+    expect(withStripes.top.id).toBe('top')
+    expect(withStripes.reason).not.toContain('disegni')
+
+    const bothStriped = expectOutfit(
+      generateOutfit(
+        [
+          garment({ id: 'top', category: 'top', colour: 'bianco', pattern: 'righe' }),
+          garment({ id: 'pants', category: 'pantaloni', colour: 'blu', pattern: 'righe' }),
+          garment({ id: 'shoes', category: 'scarpe', colour: 'nero', pattern: 'tinta unita' }),
+        ],
+        'casual',
+        'estate',
+        2,
+      ),
+    )
+    expect(bothStriped.reason).not.toContain('disegni')
+  })
+
+  it('accosta disegni diversi solo se non c’è alternativa, e lo dice', () => {
+    const outfit = expectOutfit(
+      generateOutfit(
+        [
+          garment({ id: 'top', category: 'top', colour: 'blu', pattern: 'righe' }),
+          garment({ id: 'pants', category: 'pantaloni', colour: 'nero', pattern: 'quadri' }),
+          garment({ id: 'shoes', category: 'scarpe', colour: 'bianco', pattern: 'tinta unita' }),
+        ],
+        'casual',
+        'estate',
+        6,
+      ),
+    )
+
+    expect(outfit.top.id).toBe('top')
+    expect(outfit.reason).toContain('Ho accostato disegni diversi perché non c’era un’alternativa migliore.')
+  })
+
+  it('un capo senza disegno conta come tinta unita', () => {
+    const outfit = expectOutfit(
+      generateOutfit(
+        [
+          garment({ id: 'top', category: 'top', colour: 'bianco' }),
+          garment({ id: 'pants', category: 'pantaloni', colour: 'blu', pattern: 'quadri' }),
+          garment({ id: 'shoes', category: 'scarpe', colour: 'nero' }),
+        ],
+        'casual',
+        'estate',
+        1,
+      ),
+    )
+
+    expect(outfit.top.id).toBe('top')
+    expect(outfit.reason).not.toContain('disegni')
+  })
+
+  it('non mette scarpe sport con una giacca elegante se c’è un’alternativa', () => {
+    const outfit = expectOutfit(
+      generateOutfit(
+        [
+          garment({ id: 'top', category: 'top', occasion: 'elegante', colour: 'nero', season: 'tutte' }),
+          garment({ id: 'pants', category: 'pantaloni', occasion: 'elegante', colour: 'grigio', season: 'tutte' }),
+          garment({ id: 'sport', category: 'scarpe', occasion: 'sport', colour: 'bianco', season: 'tutte' }),
+          garment({ id: 'dress', category: 'scarpe', occasion: 'elegante', colour: 'nero', season: 'tutte' }),
+          garment({ id: 'jacket', category: 'giacca', occasion: 'elegante', colour: 'nero', season: 'tutte' }),
+        ],
+        'elegante',
+        'inverno',
+        1,
+      ),
+    )
+
+    expect(outfit.scarpe.id).toBe('dress')
+    expect(outfit.giacca?.id).toBe('jacket')
+    expect(outfit.reason).not.toContain('sport ed elegante')
+  })
+
+  it('se non c’è alternativa, accosta sport ed elegante e lo dice', () => {
+    const outfit = expectOutfit(
+      generateOutfit(
+        [
+          garment({ id: 'top', category: 'top', occasion: 'elegante', colour: 'nero', season: 'tutte' }),
+          garment({ id: 'pants', category: 'pantaloni', occasion: 'elegante', colour: 'grigio', season: 'tutte' }),
+          garment({ id: 'sport', category: 'scarpe', occasion: 'sport', colour: 'bianco', season: 'tutte' }),
+          garment({ id: 'jacket', category: 'giacca', occasion: 'elegante', colour: 'nero', season: 'tutte' }),
+        ],
+        'elegante',
+        'inverno',
+        3,
+      ),
+    )
+
+    expect(outfit.scarpe.id).toBe('sport')
+    expect(outfit.giacca?.id).toBe('jacket')
+    expect(outfit.relaxed).toBe('occasion')
+    expect(outfit.reason).toContain('Ho messo insieme sport ed elegante perché non c’era un’alternativa migliore.')
+  })
+
+  it('in estate preferisce il cotone alla lana, se entrambi vanno bene', () => {
+    for (let seed = 1; seed <= 12; seed += 1) {
+      const outfit = expectOutfit(
+        generateOutfit(
+          [
+            garment({ id: 'lana', category: 'top', colour: 'grigio', season: 'estate', material: 'lana' }),
+            garment({ id: 'cotone', category: 'top', colour: 'bianco', season: 'estate', material: 'cotone' }),
+            garment({ id: 'pants', category: 'pantaloni', colour: 'beige', season: 'estate' }),
+            garment({ id: 'shoes', category: 'scarpe', colour: 'nero', season: 'estate' }),
+          ],
+          'casual',
+          'estate',
+          seed,
+        ),
+      )
+      expect(outfit.top.id).toBe('cotone')
+    }
+  })
+
+  it('in mezza stagione il denim viene prima della lana', () => {
+    for (let seed = 1; seed <= 12; seed += 1) {
+      const outfit = expectOutfit(
+        generateOutfit(
+          [
+            garment({ id: 'top', category: 'top', colour: 'bianco', season: 'autunno' }),
+            garment({ id: 'lana', category: 'pantaloni', colour: 'marrone', season: 'autunno', material: 'lana' }),
+            garment({ id: 'denim', category: 'pantaloni', colour: 'blu', season: 'autunno', material: 'denim' }),
+            garment({ id: 'shoes', category: 'scarpe', colour: 'nero', season: 'autunno' }),
+          ],
+          'casual',
+          'autunno',
+          seed,
+        ),
+      )
+      expect(outfit.pantaloni.id).toBe('denim')
+    }
+  })
+
+  it('se l’unico top estivo è di lana, lo usa lo stesso', () => {
+    const outfit = expectOutfit(
+      generateOutfit(
+        [
+          garment({ id: 'lana', category: 'top', colour: 'grigio', season: 'estate', material: 'lana' }),
+          garment({ id: 'pants', category: 'pantaloni', colour: 'beige', season: 'estate', material: 'cotone' }),
+          garment({ id: 'shoes', category: 'scarpe', colour: 'nero', season: 'estate' }),
+        ],
+        'casual',
+        'estate',
+        1,
+      ),
+    )
+
+    expect(outfit.top.id).toBe('lana')
+    expect(outfit.relaxed).toBe('none')
+  })
 })
 
 describe('swapPiece', () => {
@@ -353,6 +556,20 @@ describe('swapPiece', () => {
     const single = swapPiece(outfit, 'pantaloni', clashing, 4)
     expect(single.swapped).toBe(false)
     expect(single.outfit).toBe(outfit)
+  })
+
+  it('non sostituisce con un disegno che stona', () => {
+    const clashing = [
+      garment({ id: 'top', category: 'top', colour: 'bianco', pattern: 'tinta unita' }),
+      garment({ id: 'top-quadri', category: 'top', colour: 'blu', pattern: 'quadri' }),
+      garment({ id: 'pants', category: 'pantaloni', colour: 'nero', pattern: 'righe' }),
+      garment({ id: 'shoes', category: 'scarpe', colour: 'nero' }),
+    ]
+    const outfit = expectOutfit(generateOutfit(clashing, 'casual', 'estate', 1))
+    expect(outfit.top.id).toBe('top')
+    const swapped = swapPiece(outfit, 'top', clashing, 2)
+    expect(swapped.swapped).toBe(false)
+    expect(swapped.reason).toBe('Non ho un altro capo che stia bene in questo outfit.')
   })
 
   it('rifiuta un posto vuoto', () => {
