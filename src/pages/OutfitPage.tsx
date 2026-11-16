@@ -19,6 +19,7 @@ import {
   type Occasion,
   type Season,
 } from '../domain/types.ts'
+import { useCloud } from '../cloud/context.ts'
 import { listGarments, saveOutfit } from '../storage/db.ts'
 
 const REQUEST_SEASONS = ['primavera', 'estate', 'autunno', 'inverno'] as const
@@ -49,8 +50,10 @@ export function OutfitPage() {
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const seedCounter = useRef(0)
+  const { revision, starting } = useCloud()
 
   useEffect(() => {
+    if (starting) return
     let active = true
     listGarments()
       .then((items) => {
@@ -62,7 +65,7 @@ export function OutfitPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [revision, starting])
 
   function clearLook() {
     setResult(null)

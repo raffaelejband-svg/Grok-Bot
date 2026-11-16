@@ -5,6 +5,7 @@ import { GarmentForm } from '../components/GarmentForm.tsx'
 import { PhotoView } from '../components/PhotoView.tsx'
 import { EMPTY_GARMENT_FILTER, filterGarments, type GarmentFilter } from '../domain/garments.ts'
 import { CATEGORY_LABELS, COLOUR_LABELS, SEASON_LABELS, type Garment } from '../domain/types.ts'
+import { useCloud } from '../cloud/context.ts'
 import { addGarment, deleteGarment, listGarments, updateGarment } from '../storage/db.ts'
 
 type Mode = { type: 'browse' } | { type: 'create' } | { type: 'edit'; garment: Garment }
@@ -26,10 +27,12 @@ export function GuardarobaPage() {
   const [reloadKey, setReloadKey] = useState(0)
   const [filter, setFilter] = useState<GarmentFilter>(EMPTY_GARMENT_FILTER)
   const [mode, setMode] = useState<Mode>({ type: 'browse' })
+  const { revision, starting, linked } = useCloud()
 
   const modeKey = mode.type === 'edit' ? `edit:${mode.garment.id}` : mode.type
 
   useEffect(() => {
+    if (starting) return
     const id = ++loadId.current
     let cancelled = false
     listGarments()
@@ -44,7 +47,7 @@ export function GuardarobaPage() {
     return () => {
       cancelled = true
     }
-  }, [reloadKey])
+  }, [reloadKey, revision, starting])
 
   useEffect(() => {
     const first = seenMode.current === null
@@ -151,7 +154,11 @@ export function GuardarobaPage() {
               <EmptyState
                 icon="hanger"
                 title="Il guardaroba è ancora vuoto"
-                text="Aggiungi una foto: il capo resta solo su questo telefono."
+                text={
+                  linked
+                    ? 'Aggiungi una foto: la ritrovi anche dove entri con lo stesso account.'
+                    : 'Aggiungi una foto: il capo resta solo su questo telefono.'
+                }
               />
             </div>
           ) : (

@@ -200,6 +200,8 @@ export type Garment = {
   occasion: Occasion
   /** Data di creazione in formato ISO 8601, per esempio 2026-11-13T13:00:00.000Z. */
   createdAt: string
+  /** Ultima modifica, per allineare i dispositivi. Se manca, vale createdAt. */
+  updatedAt?: string
 }
 
 export type Outfit = {
@@ -210,4 +212,6 @@ export type Outfit = {
   season: Season
   /** Data di creazione in formato ISO 8601, per esempio 2026-11-13T13:00:00.000Z. */
   createdAt: string
+  /** Ultima modifica, per allineare i dispositivi. Se manca, vale createdAt. */
+  updatedAt?: string
 }

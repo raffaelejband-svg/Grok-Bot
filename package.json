@@ -2,7 +2,7 @@
   "name": "armadio-outfit",
   "private": true,
   "version": "0.1.0",
-  "description": "App per creare outfit con i vestiti che hai già. Capi e look restano nel browser.",
+  "description": "App per creare outfit con i vestiti che hai già. Senza account restano nel browser; con un account si ritrovano sugli altri dispositivi.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -21,6 +21,7 @@
     "@tensorflow/tfjs-converter": "^4.22.0",
     "@tensorflow/tfjs-core": "^4.22.0",
     "@tensorflow/tfjs-layers": "^4.22.0",
+    "firebase": "^11.10.0",
     "idb": "^8.0.4",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

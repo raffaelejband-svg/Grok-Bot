@@ -100,8 +100,9 @@ export function ImpostazioniPage() {
           <li>Copiala, incollala qui sopra e tocca Salva la chiave.</li>
         </ol>
         <p className="mt-4 text-base leading-relaxed text-muted">
-          La chiave resta solo in questo browser. Non finisce nel codice né su GitHub. Con la chiave, la foto di un
-          capo nuovo viene inviata a Google per essere letta. Senza chiave, la foto non esce dal telefono.
+        La chiave resta solo in questo browser. Non finisce nel codice, su GitHub, né sull’account se ne usi uno. Con
+        la chiave, la foto di un capo nuovo viene inviata a Google per essere letta. Senza chiave, la foto non esce
+        dal telefono.
         </p>
       </div>
     </section>

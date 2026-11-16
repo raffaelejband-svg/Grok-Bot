@@ -51,6 +51,12 @@ function chooseFile(label: string, file: File) {
   fireEvent.change(input)
 }
 
+function chooseFiles(label: string, files: File[]) {
+  const input = screen.getByLabelText(label)
+  Object.defineProperty(input, 'files', { configurable: true, value: files })
+  fireEvent.change(input)
+}
+
 async function openFilters() {
   fireEvent.click(screen.getByRole('button', { name: 'Filtra i capi' }))
   expect(await screen.findByLabelText('Categoria')).toBeInTheDocument()
@@ -339,5 +345,50 @@ describe('guardaroba', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Riprova' }))
     expect(await screen.findByRole('button', { name: 'Top, Blu, Estate' })).toBeInTheDocument()
+  })
+
+  it('riconosce tante foto e le salva solo dopo la conferma', async () => {
+    const pending: Array<(value: GarmentGuess) => void> = []
+    vi.mocked(recognizeGarment).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          pending.push(resolve)
+        }),
+    )
+    render(<GuardarobaPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Aggiungi un capo' }))
+    const gallery = screen.getByLabelText('Scegli dalla galleria')
+    expect(gallery).toHaveAttribute('multiple')
+
+    chooseFiles('Scegli dalla galleria', [
+      new File(['prima'], 'prima.jpg', { type: 'image/jpeg' }),
+      new File(['seconda'], 'seconda.jpg', { type: 'image/jpeg' }),
+    ])
+
+    expect(await screen.findByText('Riconosco la foto 1 di 2…')).toBeInTheDocument()
+    await waitFor(() => expect(recognizeGarment).toHaveBeenCalledTimes(1))
+    pending[0]?.(guess({ category: 'top', colour: 'blu', subType: 'camicia' }))
+    expect(await screen.findByText('Riconosco la foto 2 di 2…')).toBeInTheDocument()
+    await waitFor(() => expect(pending).toHaveLength(2))
+    pending[1]?.(guess({ category: 'scarpe', colour: 'nero', subType: 'sneakers' }))
+
+    expect(await screen.findByRole('button', { name: 'Conferma i capi' })).toBeEnabled()
+    expect(screen.getByLabelText('Categoria, foto 1')).toHaveValue('top')
+    expect(screen.getByLabelText('Categoria, foto 2')).toHaveValue('scarpe')
+    expect(addGarment).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText('Colore, foto 2'), { target: { value: 'bianco' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Conferma i capi' }))
+
+    await waitFor(() => expect(addGarment).toHaveBeenCalledTimes(2))
+    const [first, second] = vi.mocked(addGarment).mock.calls.map((call) => call[0])
+    expect(first?.category).toBe('top')
+    expect(first?.colour).toBe('blu')
+    expect(first?.season).toBe('tutte')
+    expect(await first?.photo.text()).toBe('prima')
+    expect(second?.category).toBe('scarpe')
+    expect(second?.colour).toBe('bianco')
+    expect(await second?.photo.text()).toBe('seconda')
+    expect(await screen.findByText('Ho salvato 2 capi.')).toBeInTheDocument()
   })
 })

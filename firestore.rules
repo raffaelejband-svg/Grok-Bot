@@ -1,0 +1,46 @@
+rules_version = '2';
+// Regole di Cloud Firestore per Armadio Outfit.
+// Un utente entrato può leggere e scrivere solo i propri capi, preferiti e impostazioni.
+// Il resto è chiuso. La chiave Gemini non è ammessa in questi documenti.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedInAs(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function noSecretFields() {
+      return !request.resource.data.keys().hasAny([
+        'geminiApiKey',
+        'geminiKey',
+        'gemini-key',
+        'apiKey',
+        'password',
+        'secret',
+        'token'
+      ]) && !request.resource.data.get('values', {}).keys().hasAny([
+        'geminiApiKey',
+        'geminiKey',
+        'gemini-key',
+        'apiKey',
+        'password',
+        'secret',
+        'token'
+      ]);
+    }
+
+    match /users/{userId}/garments/{garmentId} {
+      allow read, delete: if signedInAs(userId);
+      allow create, update: if signedInAs(userId) && noSecretFields();
+    }
+
+    match /users/{userId}/outfits/{outfitId} {
+      allow read, delete: if signedInAs(userId);
+      allow create, update: if signedInAs(userId) && noSecretFields();
+    }
+
+    match /users/{userId}/settings/{settingId} {
+      allow read: if signedInAs(userId);
+      allow create, update: if signedInAs(userId) && settingId == 'app' && noSecretFields();
+    }
+  }
+}
